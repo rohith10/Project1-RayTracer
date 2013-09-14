@@ -74,8 +74,8 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 
 	float tnear = -1e5, tfar = 1e5;
 //	float EPSILON = 1e-3;
-	glm::vec3 lowerLeftBack = glm::vec3 (0, 0, 0);
-	glm::vec3 upperRightFront = glm::vec3 (1, 1, 1);
+	glm::vec3 lowerLeftBack = glm::vec3 (-0.5, -0.5, -0.5);
+	glm::vec3 upperRightFront = glm::vec3 (0.5, 0.5, 0.5);
 
 	ray transformedRay;
 	transformedRay.origin = multiplyMV (box.inverseTransform, glm::vec4 (r.origin, 1.0));
@@ -112,7 +112,7 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	}
 
 	glm::vec4 intersectionPointInBodySpace = glm::vec4 (getPointOnRay (transformedRay, tnear), 1.0);
-	glm::vec4 bodySpaceOrigin = glm::vec4 (0.5,0.5,0.5,1);
+	glm::vec4 bodySpaceOrigin = glm::vec4 (0,0,0,1);
 
 	normal = glm::vec3 (0, 0, 0);
 	for (int loopVar = 0; loopVar < 3; loopVar ++)
@@ -127,7 +127,6 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	}
 
 	intersectionPoint = multiplyMV (box.transform, intersectionPointInBodySpace);
-	glm::vec3 rayOrigin = multiplyMV (box.transform, bodySpaceOrigin);
 
 	return glm::length (r.origin - intersectionPoint);
 }
