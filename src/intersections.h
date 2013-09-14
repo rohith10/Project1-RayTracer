@@ -72,7 +72,50 @@ __host__ __device__ glm::vec3 getSignOfRay(ray r){
 //Cube intersection test, return -1 if no intersection, otherwise, distance to intersection
 __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& intersectionPoint, glm::vec3& normal){
 
-    return -1;
+	float tnear = -1e5, tfar = 1e5;
+//	float EPSILON = 1e-3;
+	glm::vec3 lowerLeftBack = glm::vec3 (0, 0, 0);
+	glm::vec3 upperRightFront = glm::vec3 (1, 1, 1);
+
+	ray transformedRay;
+	transformedRay.origin = multiplyMV (box.inverseTransform, glm::vec4 (r.origin, 1.0));
+	transformedRay.direction = glm::normalize (multiplyMV (box.inverseTransform, glm::vec4 (r.direction, 0.0)));
+
+	for (int loopVar = 0; loopVar < 3; loopVar ++)
+	{
+		if (fabs (transformedRay.direction [loopVar]) < EPSILON)
+		{
+			if ((transformedRay.origin [loopVar] < lowerLeftBack [loopVar]-EPSILON) && (transformedRay.origin [loopVar] > upperRightFront [loopVar]+EPSILON))
+				return -1;
+		}
+		else
+		{
+			float t1 = (lowerLeftBack [loopVar] - transformedRay.origin [loopVar]) / transformedRay.direction [loopVar];
+			float t2 = (upperRightFront [loopVar] - transformedRay.origin [loopVar]) / transformedRay.direction [loopVar];
+
+			if (t1 > t2)
+			{
+				t2 += t1;
+				t1 = t2 - t1;
+				t2 -= t1;
+			}
+
+			if (tnear < t1)
+				tnear = t1;
+
+			if (tfar > t2)
+				tfar = t2;
+
+			if (tnear > tfar)
+				return -1;
+		}
+	}
+
+	intersectionPoint = multiplyMV (box.transform, glm::vec4 (getPointOnRay (transformedRay, tnear), 1.0));
+	glm::vec3 rayOrigin = multiplyMV (box.transform, glm::vec4 (0,0,0,1));
+
+	normal = glm::normalize (intersectionPoint - rayOrigin);
+	return glm::length (r.origin - intersectionPoint);
 }
 
 //LOOK: Here's an intersection test example from a sphere. Now you just need to figure out cube and, optionally, triangle.
