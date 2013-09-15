@@ -154,29 +154,29 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	for (int i = 0; i < numberOfGeoms; ++i)
 	{
 		materialColour = glm::vec3 (0, 0, 0);
-//		float interceptValue = -1;
-//		glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
-//		glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
-//
-//		if (geoms [i].type == SPHERE)
-//		{	
-//			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
-//			if (interceptValue > 0)
-//			{
-//				materialColour = glm::vec3 (1,0,0);//textureArray [geoms [i].materialid];
-////				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
-//			}
-//		}
-//		else if (geoms [i].type == CUBE)
-//		{	
-//			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
-//			if (interceptValue > 0)
-//			{
-//				materialColour = glm::vec3 (0,0,1);//textureArray [geoms [i].materialid];
-////				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
-//			}
-//		}
-		materialColour = textureArray [x%numberOfGeoms];
+		float interceptValue = -1;
+		glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
+		glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
+
+		if (geoms [i].type == SPHERE)
+		{	
+			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+			if (interceptValue > 0)
+			{
+				materialColour = glm::vec3 (1,0,0);//textureArray [geoms [i].materialid];
+//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
+			}
+		}
+		else if (geoms [i].type == CUBE)
+		{	
+			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+			if (interceptValue > 0)
+			{
+				materialColour = glm::vec3 (0,0,1);//textureArray [geoms [i].materialid];
+//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
+			}
+		}
+//		materialColour = textureArray [y%numberOfGeoms];
 		colors[index] = materialColour;
 //		colors[index].y = fabs (castRay.direction.y);
 //		colors[index].z = fabs (castRay.direction.z);//generateRandomNumberFromThread(resolution, time, x, y);//materialColour;
@@ -273,14 +273,20 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //retrieve image from GPU
   cudaMemcpy( renderCam->image, cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 
-  //free up stuff, or else we'll leak memory like a madman
-  cudaFree( cudaimage );
-  cudaFree( cudageoms );
-  cudaFree (materialColours);
-  delete geomList;
-
   // make certain the kernel has completed
   cudaThreadSynchronize();
+
+  //free up stuff, or else we'll leak memory like a madman
+   if (cudaimage)
+		cudaFree( cudaimage );
+   if (cudageoms)
+		cudaFree( cudageoms );
+   if (materialColours)
+		cudaFree (materialColours);
+//  cudaFree( cudaimage );
+//  cudaFree( cudageoms );
+//  cudaFree (materialColours);
+  delete geomList;
 
   checkCUDAError("Kernel failed!");
 }

@@ -123,9 +123,9 @@ __host__ __device__ float sphereIntersectionTest(staticGeom sphere, ray r, glm::
   if (t1 < 0 && t2 < 0) {
       return -1;
   } else if (t1 > 0 && t2 > 0) {
-      t = std::min(t1, t2);
+      t = min(t1, t2);
   } else {
-      t = std::max(t1, t2);
+      t = max(t1, t2);
   }
 
   glm::vec3 realIntersectionPoint = multiplyMV(sphere.transform, glm::vec4(getPointOnRay(rt, t), 1.0));
