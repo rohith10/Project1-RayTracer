@@ -14,6 +14,7 @@
 #include "raytraceKernel.h"
 #include "intersections.h"
 #include "interactions.h"
+#include "intersections.cpp"
 #include <vector>
 
 #if CUDA_VERSION >= 5000
@@ -63,7 +64,8 @@ __host__ __device__ glm::vec3 generateRandomNumberFromThread(glm::vec2 resolutio
 
 //TODO: IMPLEMENT THIS FUNCTION
 //Function that does the initial raycast from the camera
-__host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time, int x, int y, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov){
+__host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time, int x, int y, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov, projectionInfo &ProjectionParams)
+{
   ray r;
   r.origin = eye;
   r.direction = glm::vec3(0,0,-1);
@@ -124,7 +126,7 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, glm::vec3* textureArray){
+                            staticGeom* geoms, int numberOfGeoms, glm::vec3* textureArray, projectionInfo ProjectionParams){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -132,7 +134,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
   if((x<=resolution.x && y<=resolution.y))
   {
-	ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov);
+	ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, ProjectionParams);
 	
 	glm::vec3 materialColour;
 	for (int i = 0; i < numberOfGeoms; ++i)
@@ -170,7 +172,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
   
   int traceDepth = 1; //determines how many bounces the raytracer traces
-  setupProjection (ProjectionParams, renderCam->positions, renderCam->ups, renderCam->views, renderCam->fov);
+  setupProjection (ProjectionParams, *renderCam->positions, *renderCam->ups, *renderCam->views, renderCam->fov);
 
   // set up crucial magic
   int tileSize = 8;
@@ -217,7 +219,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.fov = renderCam->fov;
 
   //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours);
+  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours, ProjectionParams);
 
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 
