@@ -22,6 +22,10 @@
     #include <cutil_math.h>
 #endif
 
+const glm::vec3 bgColour = glm::vec3 (0.55, 0.25, 0);
+
+projectionInfo	ProjectionParams;
+
 void checkCUDAError(const char *msg) {
   cudaError_t err = cudaGetLastError();
   if( cudaSuccess != err) {
@@ -29,6 +33,22 @@ void checkCUDAError(const char *msg) {
     exit(EXIT_FAILURE); 
   }
 } 
+
+void	setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov)
+{
+	//Set up the projection variables:
+	float	degToRad = 3.1415926 / 180.0;
+	float	radToDeg = 1.0 / degToRad;
+
+	ProjectionParams.centreProj = eye+view;
+	glm::vec3	eyeToProjCentre = ProjectionParams.centreProj - eye;
+	glm::vec3	A = glm::cross (ProjectionParams.centreProj, up);
+	glm::vec3	B = glm::cross (A, ProjectionParams.centreProj);
+	float		lenEyeToProjCentre = glm::length (eyeToProjCentre);
+	
+	ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((fov.x*degToRad) / 2.0);
+	ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((fov.y*degToRad) / 2.0);
+}
 
 //LOOK: This function demonstrates how to use thrust for random number generation on the GPU!
 //Function that generates static.
@@ -45,8 +65,15 @@ __host__ __device__ glm::vec3 generateRandomNumberFromThread(glm::vec2 resolutio
 //Function that does the initial raycast from the camera
 __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time, int x, int y, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov){
   ray r;
-  r.origin = glm::vec3(0,0,0);
+  r.origin = eye;
   r.direction = glm::vec3(0,0,-1);
+
+  float normDeviceX = (float)x / resolution.x;
+  float normDeviceY = (float)y / resolution.y;
+
+  glm::vec3 P = ProjectionParams.centreProj + (2*normDeviceX - 1)*ProjectionParams.halfVecH + (2*normDeviceY - 1)*ProjectionParams.halfVecV;
+  r.direction = glm::normalize (P - r.origin);
+
   return r;
 }
 
@@ -97,16 +124,45 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms){
+                            staticGeom* geoms, int numberOfGeoms, glm::vec3* textureArray){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
 
-  if((x<=resolution.x && y<=resolution.y)){
+  if((x<=resolution.x && y<=resolution.y))
+  {
+	ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov);
+	
+	glm::vec3 materialColour;
+	for (int i = 0; i < numberOfGeoms; ++i)
+	{
+		materialColour = glm::vec3 (0, 0, 0);
+		float interceptValue = -1;
+		glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
+		glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
 
-    colors[index] = generateRandomNumberFromThread(resolution, time, x, y);
-   }
+		if (geoms [i].type == SPHERE)
+		{	
+			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+			if (interceptValue > 0)
+			{
+				materialColour = textureArray [geoms [i].materialid];
+			}
+		}
+		else if (geoms [i].type == CUBE)
+		{	
+			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+			if (interceptValue > 0)
+			{
+				materialColour = textureArray [geoms [i].materialid];
+			}
+		}
+
+		colors[index] = materialColour;
+	}
+ //generateRandomNumberFromThread(resolution, time, x, y);
+  }
 }
 
 //TODO: FINISH THIS FUNCTION
@@ -114,6 +170,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
   
   int traceDepth = 1; //determines how many bounces the raytracer traces
+  setupProjection (ProjectionParams, renderCam->positions, renderCam->ups, renderCam->views, renderCam->fov);
 
   // set up crucial magic
   int tileSize = 8;
@@ -143,6 +200,14 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
   
+  glm::vec3		*materialColours = NULL;
+  cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(glm::vec3));
+  for (int loopVar = 0; loopVar < numberOfMaterials; ++loopVar)
+  {
+	  glm::vec3 *index = materialColours+loopVar;
+	  cudaMemcpy( index, &(materials [loopVar].color), sizeof(glm::vec3), cudaMemcpyHostToDevice);
+  }
+
   //package camera
   cameraData cam;
   cam.resolution = renderCam->resolution;
@@ -152,7 +217,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.fov = renderCam->fov;
 
   //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms);
+  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours);
 
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 
