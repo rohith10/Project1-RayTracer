@@ -138,22 +138,22 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms /*,glm::vec3* textureArray*/, projectionInfo ProjectionParams){
+                            staticGeom* geoms, int numberOfGeoms, glm::vec3* textureArray, projectionInfo ProjectionParams){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
 //  cuPrintf ("Pixel: (%d, %d)\n", x, y);
+  
   if((x<=resolution.x && y<=resolution.y))
   {
-	ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
+	  ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
 					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
 //	
-////	printf ("Hello!\n");
-//	glm::vec3 materialColour;
-//	for (int i = 0; i < numberOfGeoms; ++i)
-//	{
-//		materialColour = glm::vec3 (0, 0, 0);
+	glm::vec3 materialColour;
+	for (int i = 0; i < numberOfGeoms; ++i)
+	{
+		materialColour = glm::vec3 (0, 0, 0);
 //		float interceptValue = -1;
 //		glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
 //		glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
@@ -176,11 +176,13 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 ////				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
 //			}
 //		}
-
-		colors[index] = castRay.direction;//generateRandomNumberFromThread(resolution, time, x, y);//materialColour;
+		materialColour = textureArray [x%numberOfGeoms];
+		colors[index] = materialColour;
+//		colors[index].y = fabs (castRay.direction.y);
+//		colors[index].z = fabs (castRay.direction.z);//generateRandomNumberFromThread(resolution, time, x, y);//materialColour;
 	}
  //generateRandomNumberFromThread(resolution, time, x, y);
- // }
+  }
 }
 
 //TODO: FINISH THIS FUNCTION
@@ -228,13 +230,30 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
   
-  /*glm::vec3		*materialColours = NULL;
-  cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(glm::vec3));
-  for (int loopVar = 0; loopVar < numberOfMaterials; ++loopVar)
+  glm::vec3		*materialColours = NULL;
+  cudaError_t returnCode = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(glm::vec3));
+  if (returnCode != cudaSuccess)
   {
-	  glm::vec3 *index = materialColours+loopVar;
-	  cudaMemcpy( index, &(materials [loopVar].color), sizeof(glm::vec3), cudaMemcpyHostToDevice);
-  }*/
+	  std::cout << "\nError while trying to send texture data to the GPU!";
+	  std::cin.get ();
+
+	  if (cudaimage)
+		  cudaFree( cudaimage );
+	  if (cudageoms)
+		  cudaFree( cudageoms );
+	  if (materialColours)
+		  cudaFree (materialColours);
+	  
+	  exit (EXIT_FAILURE);
+  }
+  else
+  {
+	  for (int loopVar = 0; loopVar < numberOfMaterials; ++loopVar)
+	  {
+		  glm::vec3 *index = materialColours+loopVar;
+		  cudaMemcpy( index, &(materials [loopVar].color), sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	  }
+  }
 
   //package camera
   cameraData cam;
@@ -246,7 +265,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
  // cudaPrintfInit ();
   //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, /*materialColours, */ProjectionParams);
+  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours, ProjectionParams);
 //  cudaPrintfDisplay (stdout, true);
 //  cudaPrintfEnd ();
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
@@ -257,6 +276,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //free up stuff, or else we'll leak memory like a madman
   cudaFree( cudaimage );
   cudaFree( cudageoms );
+  cudaFree (materialColours);
   delete geomList;
 
   // make certain the kernel has completed
