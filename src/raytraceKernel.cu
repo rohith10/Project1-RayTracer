@@ -15,6 +15,7 @@
 #include "intersections.h"
 #include "interactions.h"
 #include <vector>
+#include "cuPrintf.cu"
 
 #if CUDA_VERSION >= 5000
     #include <helper_math.h>
@@ -23,8 +24,6 @@
 #endif
 
 const glm::vec3 bgColour = glm::vec3 (0.55, 0.25, 0);
-
-projectionInfo	ProjectionParams;
 
 void checkCUDAError(const char *msg) {
   cudaError_t err = cudaGetLastError();
@@ -63,16 +62,30 @@ __host__ __device__ glm::vec3 generateRandomNumberFromThread(glm::vec2 resolutio
 
 //TODO: IMPLEMENT THIS FUNCTION
 //Function that does the initial raycast from the camera
-__host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time, int x, int y, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov, projectionInfo &ProjectionParams)
+__host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time, int x, int y, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov, glm::vec3 centreProj,
+													glm::vec3	halfVecH, glm::vec3 halfVecV)
 {
   ray r;
   r.origin = eye;
   r.direction = glm::vec3(0,0,-1);
 
+ // float	degToRad = 3.1415926 / 180.0;
+ // float	radToDeg = 1.0 / degToRad;
+
+	//ProjectionParams.centreProj = eye+view;
+	//glm::vec3	eyeToProjCentre = ProjectionParams.centreProj - eye;
+	//glm::vec3	A = glm::cross (ProjectionParams.centreProj, up);
+	//glm::vec3	B = glm::cross (A, ProjectionParams.centreProj);
+	//float		lenEyeToProjCentre = glm::length (eyeToProjCentre);
+	//
+	//ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((fov.x*degToRad) / 2.0);
+	//ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((fov.y*degToRad) / 2.0);
+
+
   float normDeviceX = (float)x / resolution.x;
   float normDeviceY = (float)y / resolution.y;
 
-  glm::vec3 P = ProjectionParams.centreProj + (2*normDeviceX - 1)*ProjectionParams.halfVecH + (2*normDeviceY - 1)*ProjectionParams.halfVecV;
+  glm::vec3 P = /*ProjectionParams.*/centreProj + (2*normDeviceX - 1)*/*ProjectionParams.*/halfVecH + (2*normDeviceY - 1)*/*ProjectionParams.*/halfVecV;
   r.direction = glm::normalize (P - r.origin);
 
   return r;
@@ -125,16 +138,18 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, glm::vec3* textureArray, projectionInfo ProjectionParams){
+                            staticGeom* geoms, int numberOfGeoms, /*glm::vec3* textureArray, */projectionInfo ProjectionParams){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
-
+//  cuPrintf ("Pixel: (%d, %d)\n", x, y);
   if((x<=resolution.x && y<=resolution.y))
   {
-	ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, ProjectionParams);
+	ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
+					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
 	
+//	printf ("Hello!\n");
 	glm::vec3 materialColour;
 	for (int i = 0; i < numberOfGeoms; ++i)
 	{
@@ -148,7 +163,8 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
-				materialColour = textureArray [geoms [i].materialid];
+				materialColour = glm::vec3 (1,0,0);//textureArray [geoms [i].materialid];
+//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
 			}
 		}
 		else if (geoms [i].type == CUBE)
@@ -156,7 +172,8 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
-				materialColour = textureArray [geoms [i].materialid];
+				materialColour = glm::vec3 (0,0,1);//textureArray [geoms [i].materialid];
+//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
 			}
 		}
 
@@ -171,7 +188,17 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
   
   int traceDepth = 1; //determines how many bounces the raytracer traces
-  setupProjection (ProjectionParams, *renderCam->positions, *renderCam->ups, *renderCam->views, renderCam->fov);
+  projectionInfo	ProjectionParams;
+//  setupProjection (ProjectionParams, renderCam->positions [frame], renderCam->ups [frame], renderCam->views [frame], renderCam->fov);
+  float degToRad = 3.1415926 / 180.0;
+  ProjectionParams.centreProj = renderCam->positions [frame]+renderCam->views [frame];
+	glm::vec3	eyeToProjCentre = ProjectionParams.centreProj - renderCam->positions [frame];
+	glm::vec3	A = glm::cross (ProjectionParams.centreProj, renderCam->ups [frame]);
+	glm::vec3	B = glm::cross (A, ProjectionParams.centreProj);
+	float		lenEyeToProjCentre = glm::length (eyeToProjCentre);
+	
+	ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((renderCam->fov.x*degToRad) / 2.0);
+	ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((renderCam->fov.y*degToRad) / 2.0);
 
   // set up crucial magic
   int tileSize = 8;
@@ -201,13 +228,13 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
   
-  glm::vec3		*materialColours = NULL;
+  /*glm::vec3		*materialColours = NULL;
   cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(glm::vec3));
   for (int loopVar = 0; loopVar < numberOfMaterials; ++loopVar)
   {
 	  glm::vec3 *index = materialColours+loopVar;
 	  cudaMemcpy( index, &(materials [loopVar].color), sizeof(glm::vec3), cudaMemcpyHostToDevice);
-  }
+  }*/
 
   //package camera
   cameraData cam;
@@ -217,9 +244,11 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.up = renderCam->ups[frame];
   cam.fov = renderCam->fov;
 
+  cudaPrintfInit ();
   //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours, ProjectionParams);
-
+  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, /*materialColours, */ProjectionParams);
+  cudaPrintfDisplay (stdout, true);
+  cudaPrintfEnd ();
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 
   //retrieve image from GPU

@@ -20,13 +20,6 @@
     #include <cutil_math.h>
 #endif
 
-struct projectionInfo
-{
-	glm::vec3	centreProj;
-	glm::vec3	halfVecH;
-	glm::vec3	halfVecV;
-};
-
 void cudaRaytraceCore(uchar4* pos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms);
 void setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov);
 #endif

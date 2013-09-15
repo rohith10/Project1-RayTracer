@@ -121,11 +121,10 @@ void runCuda(){
       materials[i] = renderScene->materials[i];
     }
     
-  
-    // execute the kernel
+	// execute the kernel
     cudaRaytraceCore(dptr, renderCam, targetFrame, iterations, materials, renderScene->materials.size(), geoms, renderScene->objects.size() );
     // unmap buffer object
-    cudaGLUnmapBufferObject(pbo);
+	cudaGLUnmapBufferObject(pbo);
   }else{
 
     if(!finishedRender){
@@ -370,6 +369,7 @@ GLuint initShader(const char *vertexShaderPath, const char *fragmentShaderPath){
 void cleanupCuda(){
   if(pbo) deletePBO(&pbo);
   if(displayImage) deleteTexture(&displayImage);
+  cin.get ();
 }
 
 void deletePBO(GLuint* pbo){

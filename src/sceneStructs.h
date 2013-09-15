@@ -73,4 +73,11 @@ struct material{
 	float emittance;
 };
 
+struct projectionInfo
+{
+	glm::vec3	centreProj;
+	glm::vec3	halfVecH;
+	glm::vec3	halfVecV;
+};
+
 #endif //CUDASTRUCTS_H
