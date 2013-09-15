@@ -83,7 +83,7 @@ struct projectionInfo
 struct interceptInfo
 {
 	float		interceptVal;
-	glm::vec3	intrPoint;
+	glm::vec3	intrNormal;
 	glm::vec3	intrMaterial;
 };
 

@@ -5,6 +5,7 @@
 //       Peter Kutz and Yining Karl Li's GPU Pathtracer: http://gpupathtracer.blogspot.com/
 //       Yining Karl Li's TAKUA Render, a massively parallel pathtracing renderer: http://www.yiningkarlli.com
 
+#include <thrust/device_vector.h>
 #include <stdio.h>
 #include <cuda.h>
 #include <cmath>
@@ -15,8 +16,6 @@
 #include "intersections.h"
 #include "interactions.h"
 //#include <vector>
-#include <thrust/device_vector.h>
-#include <thrust/fill.h>
 
 #if CUDA_VERSION >= 5000
     #include <helper_math.h>
@@ -146,13 +145,6 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   int index = x + (y * resolution.x);
   staticGeom *light = NULL;
 
-  thrust::device_vector<interceptInfo> interceptVec;
-
-  interceptInfo theRightIntercept;					// Stores the lowest intercept.
-  theRightIntercept.interceptVal = -32767;			// Initially, it is empty/invalid
-  theRightIntercept.intrNormal = intrNormal;		// Normal - 0,0,0
-  theRightIntercept.intrMaterial = intrPoint;		// Colour - black;
-
   if((x<=resolution.x && y<=resolution.y))
   {
 	  ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
@@ -161,7 +153,18 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	glm::vec3 materialColour = glm::vec3 (0, 0, 0);
 	glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
 	glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
-	
+
+//	thrust::device_vector<interceptInfo> interceptVec;
+	interceptInfo *interceptVec = NULL;
+	cudaMalloc((void**)&interceptVec, numberOfGeoms*sizeof(interceptInfo));
+//	cudaMemcpy( cudaimage, renderCam->image, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	float interceptValue = -32767;
+
+	interceptInfo theRightIntercept;					// Stores the lowest intercept.
+	theRightIntercept.interceptVal = interceptValue;			// Initially, it is empty/invalid
+	theRightIntercept.intrNormal = intrNormal;		// Normal - 0,0,0
+	theRightIntercept.intrMaterial = intrPoint;		// Colour - black;
+
 	for (int i = 0; i < numberOfGeoms; ++i)
 	{
 		if (geoms [i].type == SPHERE)
@@ -171,12 +174,11 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			{
 				materialColour = textureArray [geoms [i].materialid];
 
-				interceptInfo thisIntercept;
-				thisIntercept.interceptVal = interceptValue;
-				thisIntercept.intrNormal = intrNormal;
-				thisIntercept.intrMaterial = materialColour;
+				interceptVec [i].interceptVal = interceptValue;
+				interceptVec [i].intrNormal = intrNormal;
+				interceptVec [i].intrMaterial = materialColour;
 				
-				interceptVec.push_back (thisIntercept);
+//				interceptVec.push_back (thisIntercept);
 			}
 		}
 		else if (geoms [i].type == CUBE)
@@ -186,12 +188,11 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			{
 				materialColour = textureArray [geoms [i].materialid];
 
-				interceptInfo thisIntercept;
-				thisIntercept.interceptVal = interceptValue;
-				thisIntercept.intrNormal = intrNormal;
-				thisIntercept.intrMaterial = materialColour;
+				interceptVec [i].interceptVal = interceptValue;
+				interceptVec [i].intrNormal = intrNormal;
+				interceptVec [i].intrMaterial = materialColour;
 				
-				interceptVec.push_back (thisIntercept);
+//				interceptVec.push_back (thisIntercept);
 			}
 		}
 //		materialColour = textureArray [y%numberOfGeoms];
@@ -200,15 +201,18 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	}
 
 	float min = 1e6;
-	for (int i = 0; i < interceptVec.size (); i++)
+	for (int i = 0; i < numberOfGeoms; i++)
 	{
-		if (interceptVec [i].interceptVal < min)
+		if (interceptVec [i].interceptVal != -32767)
 		{
-			min = interceptVec [i].interceptVal;
+			if (interceptVec [i].interceptVal < min)
+			{
+				min = interceptVec [i].interceptVal;
 
-			theRightIntercept.interceptVal = min;
-			theRightIntercept.intrNormal = interceptVec [i].intrNormal;
-			theRightIntercept.intrMaterial = interceptVec [i].intrMaterial;
+				theRightIntercept.interceptVal = min;
+				theRightIntercept.intrNormal = interceptVec [i].intrNormal;
+				theRightIntercept.intrMaterial = interceptVec [i].intrMaterial;
+			}
 		}
 	}
 
@@ -218,7 +222,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			light = &geoms [i];
 	}
 
-	if ((light) && (interceptVec.size() > 0))
+	if ((light) && (theRightIntercept.interceptVal > 0))
 	{
 		// Ambient shading
 		colors [index] = glm::vec3 (0.25 * theRightIntercept.intrMaterial.x, 0.25 * theRightIntercept.intrMaterial.y, 0.25 * theRightIntercept.intrMaterial.z);
@@ -235,6 +239,8 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	{
 		colors[index] = materialColour;
 	}
+
+	cudaFree (interceptVec);
  //generateRandomNumberFromThread(resolution, time, x, y);
   }
 }
