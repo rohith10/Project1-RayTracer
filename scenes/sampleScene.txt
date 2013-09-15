@@ -112,7 +112,7 @@ FOVY        60
 ITERATIONS  5000
 FILE        test.bmp
 frame 0
-EYE         0 0 20
+EYE         0 0 12
 VIEW        0 0 -1
 UP          0 1 0
 
@@ -187,4 +187,4 @@ material 8
 frame 0
 TRANS       0 10 0
 ROTAT       0 0 90
-SCALE       .3 3 3
+SCALE       3 3 3

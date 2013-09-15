@@ -14,8 +14,9 @@
 #include "raytraceKernel.h"
 #include "intersections.h"
 #include "interactions.h"
-#include <vector>
-#include "cuPrintf.cu"
+//#include <vector>
+#include <thrust/device_vector.h>
+#include <thrust/fill.h>
 
 #if CUDA_VERSION >= 5000
     #include <helper_math.h>
@@ -143,28 +144,39 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
-//  cuPrintf ("Pixel: (%d, %d)\n", x, y);
-  
+  staticGeom *light = NULL;
+
+  thrust::device_vector<interceptInfo> interceptVec;
+
+  interceptInfo theRightIntercept;					// Stores the lowest intercept.
+  theRightIntercept.interceptVal = -32767;			// Initially, it is empty/invalid
+  theRightIntercept.intrNormal = intrNormal;		// Normal - 0,0,0
+  theRightIntercept.intrMaterial = intrPoint;		// Colour - black;
+
   if((x<=resolution.x && y<=resolution.y))
   {
 	  ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
 					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
 //	
-	glm::vec3 materialColour;
+	glm::vec3 materialColour = glm::vec3 (0, 0, 0);
+	glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
+	glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
+	
 	for (int i = 0; i < numberOfGeoms; ++i)
 	{
-		materialColour = glm::vec3 (0, 0, 0);
-		float interceptValue = -1;
-		glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
-		glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
-
 		if (geoms [i].type == SPHERE)
 		{	
 			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
-				materialColour = glm::vec3 (1,0,0);//textureArray [geoms [i].materialid];
-//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
+				materialColour = textureArray [geoms [i].materialid];
+
+				interceptInfo thisIntercept;
+				thisIntercept.interceptVal = interceptValue;
+				thisIntercept.intrNormal = intrNormal;
+				thisIntercept.intrMaterial = materialColour;
+				
+				interceptVec.push_back (thisIntercept);
 			}
 		}
 		else if (geoms [i].type == CUBE)
@@ -172,14 +184,56 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
-				materialColour = glm::vec3 (0,0,1);//textureArray [geoms [i].materialid];
-//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
+				materialColour = textureArray [geoms [i].materialid];
+
+				interceptInfo thisIntercept;
+				thisIntercept.interceptVal = interceptValue;
+				thisIntercept.intrNormal = intrNormal;
+				thisIntercept.intrMaterial = materialColour;
+				
+				interceptVec.push_back (thisIntercept);
 			}
 		}
 //		materialColour = textureArray [y%numberOfGeoms];
-		colors[index] = materialColour;
 //		colors[index].y = fabs (castRay.direction.y);
 //		colors[index].z = fabs (castRay.direction.z);//generateRandomNumberFromThread(resolution, time, x, y);//materialColour;
+	}
+
+	float min = 1e6;
+	for (int i = 0; i < interceptVec.size (); i++)
+	{
+		if (interceptVec [i].interceptVal < min)
+		{
+			min = interceptVec [i].interceptVal;
+
+			theRightIntercept.interceptVal = min;
+			theRightIntercept.intrNormal = interceptVec [i].intrNormal;
+			theRightIntercept.intrMaterial = interceptVec [i].intrMaterial;
+		}
+	}
+
+	for (int i = 0; i < numberOfGeoms; ++i)
+	{
+		if (geoms [i].materialid == 8)
+			light = &geoms [i];
+	}
+
+	if ((light) && (interceptVec.size() > 0))
+	{
+		// Ambient shading
+		colors [index] = glm::vec3 (0.25 * theRightIntercept.intrMaterial.x, 0.25 * theRightIntercept.intrMaterial.y, 0.25 * theRightIntercept.intrMaterial.z);
+
+		//Diffuse shading
+		intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
+		glm::vec3 lightVec = light->translation - intrPoint;
+		float dotPdt = max (glm::dot (theRightIntercept.intrNormal, -lightVec), (float)0);
+		colors [index] += glm::vec3 (textureArray [light->materialid].x * theRightIntercept.intrMaterial.x, 
+									textureArray [light->materialid].y * theRightIntercept.intrMaterial.y, 
+									textureArray [light->materialid].z * theRightIntercept.intrMaterial.z) * dotPdt;
+	}
+	else
+	{
+		colors[index] = materialColour;
 	}
  //generateRandomNumberFromThread(resolution, time, x, y);
   }
@@ -263,11 +317,10 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.up = renderCam->ups[frame];
   cam.fov = renderCam->fov;
 
- // cudaPrintfInit ();
+  cudaPrintfInit ();
   //kernel launches
   raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours, ProjectionParams);
-//  cudaPrintfDisplay (stdout, true);
-//  cudaPrintfEnd ();
+  
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 
   //retrieve image from GPU
@@ -275,7 +328,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   // make certain the kernel has completed
   cudaThreadSynchronize();
-
+  cudaPrintfDisplay (stdout, true);
+  cudaPrintfEnd ();
   //free up stuff, or else we'll leak memory like a madman
    if (cudaimage)
 		cudaFree( cudaimage );

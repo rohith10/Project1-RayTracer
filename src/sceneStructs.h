@@ -80,4 +80,11 @@ struct projectionInfo
 	glm::vec3	halfVecV;
 };
 
+struct interceptInfo
+{
+	float		interceptVal;
+	glm::vec3	intrPoint;
+	glm::vec3	intrMaterial;
+};
+
 #endif //CUDASTRUCTS_H

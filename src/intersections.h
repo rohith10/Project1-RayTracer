@@ -207,26 +207,36 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	float tnear = -1e6, tfar = 1e6;
 
 	// Body space extremities.
-	glm::vec3 lowerLeftBack = glm::vec3 (-0.5, -0.5, -0.5);
-	glm::vec3 upperRightFront = glm::vec3 (0.5, 0.5, 0.5);
+	float lowerLeftBack [3] = {-0.5, -0.5, -0.5};
+	float upperRightFront [3] = {0.5, 0.5, 0.5};
 
 	ray transformedRay;
 	// Transform the ray from global to model space.
 	transformedRay.origin = multiplyMV (box.inverseTransform, glm::vec4 (r.origin, 1.0));
 	transformedRay.direction = glm::normalize (multiplyMV (box.inverseTransform, glm::vec4 (r.direction, 0.0)));
 
+	float transRayOrigArr [3];
+	transRayOrigArr [0] = transformedRay.origin.x;
+	transRayOrigArr [1] = transformedRay.origin.y;
+	transRayOrigArr [2] = transformedRay.origin.z;
+
+	float transRayDirArr [3];
+	transRayDirArr [0] = transformedRay.direction.x;
+	transRayDirArr [1] = transformedRay.direction.y;
+	transRayDirArr [2] = transformedRay.direction.z;
+
 	// For each X, Y and Z, check for intersections using the slab method as described above.
 	for (int loopVar = 0; loopVar < 3; loopVar ++)
 	{
-		if (fabs (transformedRay.direction [loopVar]) < EPSILON)
+		if (fabs (transRayDirArr [loopVar]) < EPSILON)
 		{
-			if ((transformedRay.origin [loopVar] < lowerLeftBack [loopVar]-EPSILON) && (transformedRay.origin [loopVar] > upperRightFront [loopVar]+EPSILON))
+			if ((transRayOrigArr [loopVar] < lowerLeftBack [loopVar]-EPSILON) && (transRayOrigArr [loopVar] > upperRightFront [loopVar]+EPSILON))
 				return -1;
 		}
 		else
 		{
-			float t1 = (lowerLeftBack [loopVar] - transformedRay.origin [loopVar]) / transformedRay.direction [loopVar];
-			float t2 = (upperRightFront [loopVar] - transformedRay.origin [loopVar]) / transformedRay.direction [loopVar];
+			float t1 = (lowerLeftBack [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
+			float t2 = (upperRightFront [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
 
 			if (t1 > t2)
 			{
@@ -243,6 +253,9 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 
 			if (tnear > tfar)
 				return -1;
+
+			if (tfar < 0)
+				return -1;
 		}
 	}
 
@@ -252,17 +265,36 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	glm::vec4 bodySpaceOrigin = glm::vec4 (0,0,0,1);
 
 	normal = glm::vec3 (0, 0, 0);
+
+	float normalArr [3];
+	normalArr [0] = normal.x;
+	normalArr [1] = normal.y;
+	normalArr [2] = normal.z;
+
+	float intrPtBodySpaceArr [3];
+	intrPtBodySpaceArr [0] = intersectionPointInBodySpace.x;
+	intrPtBodySpaceArr [1] = intersectionPointInBodySpace.y;
+	intrPtBodySpaceArr [2] = intersectionPointInBodySpace.z;
+
+	float bodySpaceOrigArr [3];
+	bodySpaceOrigArr [0] = bodySpaceOrigin.x;
+	bodySpaceOrigArr [1] = bodySpaceOrigin.y;
+	bodySpaceOrigArr [2] = bodySpaceOrigin.z;
+
 	for (int loopVar = 0; loopVar < 3; loopVar ++)
 	{	
-		float diff = intersectionPointInBodySpace [loopVar] - bodySpaceOrigin [loopVar];
+		float diff = intrPtBodySpaceArr [loopVar] - bodySpaceOrigArr [loopVar];
 		float diffAbs = fabs (diff);
 		if ((diffAbs >= 0.5-EPSILON) && (diffAbs <= 0.5+EPSILON))
 		{	
-			normal [loopVar] = diff / diffAbs;
+			normalArr [loopVar] = diff / diffAbs;
 			break;
 		}
 	}
 
+	normal.x = normalArr [0];
+	normal.y = normalArr [1];
+	normal.z = normalArr [2];
 	// Transform the intersection point to world space.
 	intersectionPoint = multiplyMV (box.transform, intersectionPointInBodySpace);
 
