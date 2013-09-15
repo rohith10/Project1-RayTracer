@@ -12,7 +12,6 @@ PROJ1_WIN/565Raytracer/Win32/*
 *.pdf
 *.suo
 *.user
-*.bmp
 
 # Compiled source #
 ###################

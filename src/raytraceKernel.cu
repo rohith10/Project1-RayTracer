@@ -14,7 +14,6 @@
 #include "raytraceKernel.h"
 #include "intersections.h"
 #include "interactions.h"
-#include "intersections.cpp"
 #include <vector>
 
 #if CUDA_VERSION >= 5000

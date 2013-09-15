@@ -22,9 +22,6 @@
     <ClCompile Include="..\..\src\scene.cpp">
       <Filter>Source</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\intersections.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\stb_image\stb_image_write.h">
