@@ -82,8 +82,8 @@ __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time
 	//ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((fov.y*degToRad) / 2.0);
 
 
-  float normDeviceX = (float)x / resolution.x;
-  float normDeviceY = (float)y / resolution.y;
+  float normDeviceX = (float)x / (resolution.x-1);
+  float normDeviceY = (float)y / (resolution.y-1);
 
   glm::vec3 P = /*ProjectionParams.*/centreProj + (2*normDeviceX - 1)*/*ProjectionParams.*/halfVecH + (2*normDeviceY - 1)*/*ProjectionParams.*/halfVecV;
   r.direction = glm::normalize (P - r.origin);
@@ -138,7 +138,7 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, /*glm::vec3* textureArray, */projectionInfo ProjectionParams){
+                            staticGeom* geoms, int numberOfGeoms /*,glm::vec3* textureArray*/, projectionInfo ProjectionParams){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -148,39 +148,39 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   {
 	ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
 					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
-	
-//	printf ("Hello!\n");
-	glm::vec3 materialColour;
-	for (int i = 0; i < numberOfGeoms; ++i)
-	{
-		materialColour = glm::vec3 (0, 0, 0);
-		float interceptValue = -1;
-		glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
-		glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
+//	
+////	printf ("Hello!\n");
+//	glm::vec3 materialColour;
+//	for (int i = 0; i < numberOfGeoms; ++i)
+//	{
+//		materialColour = glm::vec3 (0, 0, 0);
+//		float interceptValue = -1;
+//		glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
+//		glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
+//
+//		if (geoms [i].type == SPHERE)
+//		{	
+//			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+//			if (interceptValue > 0)
+//			{
+//				materialColour = glm::vec3 (1,0,0);//textureArray [geoms [i].materialid];
+////				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
+//			}
+//		}
+//		else if (geoms [i].type == CUBE)
+//		{	
+//			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+//			if (interceptValue > 0)
+//			{
+//				materialColour = glm::vec3 (0,0,1);//textureArray [geoms [i].materialid];
+////				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
+//			}
+//		}
 
-		if (geoms [i].type == SPHERE)
-		{	
-			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
-			if (interceptValue > 0)
-			{
-				materialColour = glm::vec3 (1,0,0);//textureArray [geoms [i].materialid];
-//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
-			}
-		}
-		else if (geoms [i].type == CUBE)
-		{	
-			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
-			if (interceptValue > 0)
-			{
-				materialColour = glm::vec3 (0,0,1);//textureArray [geoms [i].materialid];
-//				cuPrintf ("Intersected object: %d, a %d", i, geoms [i].type);
-			}
-		}
-
-		colors[index] = materialColour;
+		colors[index] = castRay.direction;//generateRandomNumberFromThread(resolution, time, x, y);//materialColour;
 	}
  //generateRandomNumberFromThread(resolution, time, x, y);
-  }
+ // }
 }
 
 //TODO: FINISH THIS FUNCTION
@@ -244,11 +244,11 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.up = renderCam->ups[frame];
   cam.fov = renderCam->fov;
 
-  cudaPrintfInit ();
+ // cudaPrintfInit ();
   //kernel launches
   raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, /*materialColours, */ProjectionParams);
-  cudaPrintfDisplay (stdout, true);
-  cudaPrintfEnd ();
+//  cudaPrintfDisplay (stdout, true);
+//  cudaPrintfEnd ();
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 
   //retrieve image from GPU
