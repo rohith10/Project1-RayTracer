@@ -154,10 +154,6 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
 	glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
 
-//	thrust::device_vector<interceptInfo> interceptVec;
-	interceptInfo *interceptVec = NULL;
-	cudaMalloc((void**)&interceptVec, numberOfGeoms*sizeof(interceptInfo));
-//	cudaMemcpy( cudaimage, renderCam->image, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	float interceptValue = -32767;
 
 	interceptInfo theRightIntercept;					// Stores the lowest intercept.
@@ -165,6 +161,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	theRightIntercept.intrNormal = intrNormal;		// Normal - 0,0,0
 	theRightIntercept.intrMaterial = intrPoint;		// Colour - black;
 
+	float min = 1e6;
 	for (int i = 0; i < numberOfGeoms; ++i)
 	{
 		if (geoms [i].type == SPHERE)
@@ -172,13 +169,14 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
-				materialColour = textureArray [geoms [i].materialid];
+				if (interceptValue < min)
+				{
+					min = interceptValue;
 
-				interceptVec [i].interceptVal = interceptValue;
-				interceptVec [i].intrNormal = intrNormal;
-				interceptVec [i].intrMaterial = materialColour;
-				
-//				interceptVec.push_back (thisIntercept);
+					theRightIntercept.interceptVal = min;
+					theRightIntercept.intrNormal = intrNormal;
+					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
+				}
 			}
 		}
 		else if (geoms [i].type == CUBE)
@@ -186,32 +184,14 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
-				materialColour = textureArray [geoms [i].materialid];
+				if (interceptValue < min)
+				{
+					min = interceptValue;
 
-				interceptVec [i].interceptVal = interceptValue;
-				interceptVec [i].intrNormal = intrNormal;
-				interceptVec [i].intrMaterial = materialColour;
-				
-//				interceptVec.push_back (thisIntercept);
-			}
-		}
-//		materialColour = textureArray [y%numberOfGeoms];
-//		colors[index].y = fabs (castRay.direction.y);
-//		colors[index].z = fabs (castRay.direction.z);//generateRandomNumberFromThread(resolution, time, x, y);//materialColour;
-	}
-
-	float min = 1e6;
-	for (int i = 0; i < numberOfGeoms; i++)
-	{
-		if (interceptVec [i].interceptVal != -32767)
-		{
-			if (interceptVec [i].interceptVal < min)
-			{
-				min = interceptVec [i].interceptVal;
-
-				theRightIntercept.interceptVal = min;
-				theRightIntercept.intrNormal = interceptVec [i].intrNormal;
-				theRightIntercept.intrMaterial = interceptVec [i].intrMaterial;
+					theRightIntercept.interceptVal = min;
+					theRightIntercept.intrNormal = intrNormal;
+					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
+				}
 			}
 		}
 	}
@@ -239,9 +219,6 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	{
 		colors[index] = materialColour;
 	}
-
-	cudaFree (interceptVec);
- //generateRandomNumberFromThread(resolution, time, x, y);
   }
 }
 
@@ -323,7 +300,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.up = renderCam->ups[frame];
   cam.fov = renderCam->fov;
 
-  cudaPrintfInit ();
+//  cudaPrintfInit ();
   //kernel launches
   raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours, ProjectionParams);
   
@@ -334,8 +311,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   // make certain the kernel has completed
   cudaThreadSynchronize();
-  cudaPrintfDisplay (stdout, true);
-  cudaPrintfEnd ();
+ // cudaPrintfDisplay (stdout, true);
+ // cudaPrintfEnd ();
   //free up stuff, or else we'll leak memory like a madman
    if (cudaimage)
 		cudaFree( cudaimage );
