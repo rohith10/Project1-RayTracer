@@ -356,16 +356,22 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 
 	//glm::vec3 iPt = transformedRay.origin+(t[minLoopVar]*transformedRay.direction);
 	//glm::vec4 intersectionPointInBodySpace = glm::vec4 (iPt.x, iPt.y, iPt.z, 1.0); 
-	//glm::vec4 normalTobeTransformed = glm::vec4 (unitVectors [minLoopVar].x, unitVectors [minLoopVar].y, unitVectors [minLoopVar].z, 0);
+	glm::vec4 normalTobeTransformed = glm::vec4 (normalArr [0], normalArr [1], normalArr [2], 0);
+	cudaMat4 transposeBoxInvTransform;
+	transposeBoxInvTransform.x.x = box.inverseTransform.x.x;	transposeBoxInvTransform.x.y = box.inverseTransform.y.x;	transposeBoxInvTransform.x.z = box.inverseTransform.z.x;	transposeBoxInvTransform.x.w = box.inverseTransform.w.x;
+	transposeBoxInvTransform.y.x = box.inverseTransform.x.y;	transposeBoxInvTransform.y.y = box.inverseTransform.y.y;	transposeBoxInvTransform.y.z = box.inverseTransform.z.y;	transposeBoxInvTransform.y.w = box.inverseTransform.w.y;
+	transposeBoxInvTransform.z.x = box.inverseTransform.x.z;	transposeBoxInvTransform.z.y = box.inverseTransform.y.z;	transposeBoxInvTransform.z.z = box.inverseTransform.z.z;	transposeBoxInvTransform.z.w = box.inverseTransform.w.z;
+	transposeBoxInvTransform.w.x = box.inverseTransform.x.w;	transposeBoxInvTransform.w.y = box.inverseTransform.y.w;	transposeBoxInvTransform.w.z = box.inverseTransform.z.w;	transposeBoxInvTransform.w.w = box.inverseTransform.w.w;
 	//normalTobeTransformed.x = normalArr [0];
 	//normalTobeTransformed.y = normalArr [1];
 	//normalTobeTransformed.z = normalArr [2];
 	//normalTobeTransformed.w = 0;
 
 	// Transform the intersection point & the normal to world space.
+//	cudaMat4 rBodyTrans = box.translation * box.rotation;
 	intersectionPoint = multiplyMV (box.transform, intersectionPointInBodySpace);
-	normal = multiplyMV (glm::transpose (box.inversetransform), normalTobeTransformed);
-
+	normal = multiplyMV (transposeBoxInvTransform, normalTobeTransformed);
+	normal = glm::normalize (normal);
 	return glm::length (r.origin - intersectionPoint);
 }
 
