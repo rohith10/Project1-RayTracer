@@ -204,179 +204,167 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	// Refer http://www.siggraph.org/education/materials/HyperGraph/raytrace/rtinter3.htm for details.
 
 	// Define the constants. tnear = -INFINITY ; tfar = +INFINITY (+/- 1e6 for practical purposes)
-	//float tnear = -1e6, tfar = 1e6;
-	//float epsilon = 1e-3;
+	float tnear = -1e6, tfar = 1e6;
+	float epsilon = 1e-3;
 
 	// Body space extremities.
-	//float lowerLeftBack [3] = {-0.5, -0.5, -0.5};
-	//float upperRightFront [3] = {0.5, 0.5, 0.5};
+	float lowerLeftBack [3] = {-0.5, -0.5, -0.5};
+	float upperRightFront [3] = {0.5, 0.5, 0.5};
 
 	ray transformedRay;
 	// Transform the ray from global to model space.
 	transformedRay.origin = multiplyMV (box.inverseTransform, glm::vec4 (r.origin, 1.0));
 	transformedRay.direction = glm::normalize (multiplyMV (box.inverseTransform, glm::vec4 (r.direction, 0.0)));
 
-	//float transRayOrigArr [3];
-	//transRayOrigArr [0] = transformedRay.origin.x;
-	//transRayOrigArr [1] = transformedRay.origin.y;
-	//transRayOrigArr [2] = transformedRay.origin.z;
+	float transRayOrigArr [3];
+	transRayOrigArr [0] = transformedRay.origin.x;
+	transRayOrigArr [1] = transformedRay.origin.y;
+	transRayOrigArr [2] = transformedRay.origin.z;
 
-	//float transRayDirArr [3];
-	//transRayDirArr [0] = transformedRay.direction.x;
-	//transRayDirArr [1] = transformedRay.direction.y;
-	//transRayDirArr [2] = transformedRay.direction.z;
+	float transRayDirArr [3];
+	transRayDirArr [0] = transformedRay.direction.x;
+	transRayDirArr [1] = transformedRay.direction.y;
+	transRayDirArr [2] = transformedRay.direction.z;
 
 	// For each X, Y and Z, check for intersections using the slab method as described above.
-	//for (int loopVar = 0; loopVar < 3; loopVar ++)
-	//{
-	//	if (fabs (transRayDirArr [loopVar]) < epsilon)
-	//	{
-	//		if ((transRayOrigArr [loopVar] < lowerLeftBack [loopVar]-epsilon) && (transRayOrigArr [loopVar] > upperRightFront [loopVar]+epsilon))
-	//			return -1;
-	//	}
-	//	else
-	//	{
-	//		float t1 = (lowerLeftBack [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
-	//		float t2 = (upperRightFront [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
-
-	//		if (t1 > t2)
-	//		{
-	//			t2 += t1;
-	//			t1 = t2 - t1;
-	//			t2 -= t1;
-	//		}
-
-	//		if (tnear < t1)
-	//			tnear = t1;
-
-	//		if (tfar > t2)
-	//			tfar = t2;
-
-	//		if (tnear > tfar)
-	//			return -1;
-
-	//		if (tfar < 0)
-	//			return -1;
-	//	}
-	//}
-
-	//// Get the intersection point in model space.
-	//glm::vec4 intersectionPointInBodySpace = glm::vec4 (getPointOnRay (transformedRay, tnear), 1.0);
-	//
-	//glm::vec4 bodySpaceOrigin = glm::vec4 (0,0,0,1);
-
-	//normal = glm::vec3 (0, 0, 0);
-
-	//float normalArr [3];
-	//normalArr [0] = normal.x;
-	//normalArr [1] = normal.y;
-	//normalArr [2] = normal.z;
-
-	//float intrPtBodySpaceArr [3];
-	//intrPtBodySpaceArr [0] = intersectionPointInBodySpace.x;
-	//intrPtBodySpaceArr [1] = intersectionPointInBodySpace.y;
-	//intrPtBodySpaceArr [2] = intersectionPointInBodySpace.z;
-
-	//float bodySpaceOrigArr [3];
-	//bodySpaceOrigArr [0] = bodySpaceOrigin.x;
-	//bodySpaceOrigArr [1] = bodySpaceOrigin.y;
-	//bodySpaceOrigArr [2] = bodySpaceOrigin.z;
-
-	//for (int loopVar = 0; loopVar < 3; loopVar ++)
-	//{	
-	//	float diff = intrPtBodySpaceArr [loopVar] - bodySpaceOrigArr [loopVar];
-	//	float diffAbs = fabs (diff);
-	//	if ((diffAbs >= 0.5-epsilon) && (diffAbs <= 0.5+epsilon))
-	//	{	
-	//		normalArr [loopVar] = diff / diffAbs;
-	//		break;
-	//	}
-	//}
-
-	glm::vec3	unitVectors [6];
-
-	float num [6], den [6], t [6], min, counter;
-
-	/*vec3	Vnorm;
-	double	vecLen = std::sqrt (std::pow (V0.x, 2) + std::pow (V0.y, 2) + std::pow (V0.z, 2));
-	if (vecLen != 1)
+	for (int loopVar = 0; loopVar < 3; loopVar ++)
 	{
-		Vnorm = V0;
-		Vnorm.x /= vecLen;
-		Vnorm.y /= vecLen;
-		Vnorm.z /= vecLen;
-	}
-	else
-		Vnorm = V0;*/
-
-	corners [0] = glm::vec3 (-0.5, -0.5, -0.5) - transformedRay.origin;
-	corners [1] = glm::vec3 (0.5, 0.5, 0.5) - transformedRay.origin;
-
-	unitVectors [0] = glm::vec3 (-1.0, 0.0, 0.0);
-	unitVectors [1] = glm::vec3 (0.0, -1.0, 0.0);
-	unitVectors [2] = glm::vec3 (0.0, 0.0, -1.0);
-	unitVectors [3] = glm::vec3 (1.0, 0.0, 0.0);
-	unitVectors [4] = glm::vec3 (0.0, 1.0, 0.0);
-	unitVectors [5] = glm::vec3 (0.0, 0.0, 1.0);
-
-	int		signChanger = 1;
-
-	for (int loopVar = 0; loopVar < 6; loopVar ++)
-	{
-		num [loopVar] = dot (corners [loopVar / 3], unitVectors [loopVar]);
-		den [loopVar] = dot (transformedRay.direction, unitVectors [loopVar]);
-
-		if (!den [loopVar])
-			t [loopVar] = -1;
-		else
-			t [loopVar] = num [loopVar] / den [loopVar];
-	}
-
-	corners [0] = vec3 (-0.5, -0.5, -0.5);
-	corners [1] = vec3 (0.5, 0.5, 0.5);
-
-	for (int loopVar = 0, counter = 0; loopVar < 6; loopVar ++)
-	{
-		if (t [loopVar] == -1)
-			continue;
-
-		glm::vec3	interceptStart = transformedRay.origin + t [loopVar]*transformedRay.direction;
-		if (((interceptStart.x >= (corners [0].x-0.0001)) && (interceptStart.x <= (corners [1].x+0.0001))) &&
-			((interceptStart.y >= (corners [0].y-0.0001)) && (interceptStart.y <= (corners [1].y+0.0001))) &&
-			((interceptStart.z >= (corners [0].z-0.0001)) && (interceptStart.z <= (corners [1].z+0.0001))))
-			continue;
-		else
-			t [loopVar] = -1;
-	}
-	
-	unsigned int minLoopVar = 0;
-	min = 1e6;
-	for (int loopVar = 0; loopVar < 6; loopVar ++)
-	{
-		if (t [loopVar] == -1)
-			continue;
-		
-		if (min > t [loopVar])
+		if (fabs (transRayDirArr [loopVar]) < epsilon)
 		{
-			min = t [loopVar];
-			minLoopVar = loopVar;
+			if ((transRayOrigArr [loopVar] < lowerLeftBack [loopVar]-epsilon) && (transRayOrigArr [loopVar] > upperRightFront [loopVar]+epsilon))
+				return -1;
+		}
+		else
+		{
+			float t1 = (lowerLeftBack [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
+			float t2 = (upperRightFront [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
+
+			if (t1 > t2)
+			{
+				t2 += t1;
+				t1 = t2 - t1;
+				t2 -= t1;
+			}
+
+			if (tnear < t1)
+				tnear = t1;
+
+			if (tfar > t2)
+				tfar = t2;
+
+			if (tnear > tfar)
+				return -1;
+
+			if (tfar < 0)
+				return -1;
 		}
 	}
-	
-	if (t [minLoopVar] < 0)
-		return -1;
 
-	glm::vec3 iPt = transformedRay.origin+(t[minLoopVar]*transformedRay.direction);
-	glm::vec4 intersectionPointInBodySpace = glm::vec4 (iPt.x, iPt.y, iPt.z, 1.0); 
-	glm::vec4 normalTobeTransformed = glm::vec4 (unitVectors [minLoopVar].x, unitVectors [minLoopVar].y, unitVectors [minLoopVar].z, 0);
+	// Get the intersection point in model space.
+	glm::vec4 intersectionPointInBodySpace = glm::vec4 (getPointOnRay (transformedRay, tnear), 1.0);
+	
+	glm::vec4 bodySpaceOrigin = glm::vec4 (0,0,0,1);
+
+	normal = glm::vec3 (0, 0, 0);
+
+	float normalArr [3];
+	normalArr [0] = normal.x;
+	normalArr [1] = normal.y;
+	normalArr [2] = normal.z;
+
+	float intrPtBodySpaceArr [3];
+	intrPtBodySpaceArr [0] = intersectionPointInBodySpace.x;
+	intrPtBodySpaceArr [1] = intersectionPointInBodySpace.y;
+	intrPtBodySpaceArr [2] = intersectionPointInBodySpace.z;
+
+	float bodySpaceOrigArr [3];
+	bodySpaceOrigArr [0] = bodySpaceOrigin.x;
+	bodySpaceOrigArr [1] = bodySpaceOrigin.y;
+	bodySpaceOrigArr [2] = bodySpaceOrigin.z;
+
+	for (int loopVar = 0; loopVar < 3; loopVar ++)
+	{	
+		float diff = intrPtBodySpaceArr [loopVar] - bodySpaceOrigArr [loopVar];
+		float diffAbs = fabs (diff);
+		if ((diffAbs >= 0.5-epsilon) && (diffAbs <= 0.5+epsilon))
+		{	
+			normalArr [loopVar] = diff / diffAbs;
+			break;
+		}
+	}
+
+	//glm::vec3	unitVectors [6];
+
+	//float num [6], den [6], t [6], min, counter;
+
+	//corners [0] = glm::vec3 (-0.5, -0.5, -0.5) - transformedRay.origin;
+	//corners [1] = glm::vec3 (0.5, 0.5, 0.5) - transformedRay.origin;
+
+	//unitVectors [0] = glm::vec3 (-1.0, 0.0, 0.0);
+	//unitVectors [1] = glm::vec3 (0.0, -1.0, 0.0);
+	//unitVectors [2] = glm::vec3 (0.0, 0.0, -1.0);
+	//unitVectors [3] = glm::vec3 (1.0, 0.0, 0.0);
+	//unitVectors [4] = glm::vec3 (0.0, 1.0, 0.0);
+	//unitVectors [5] = glm::vec3 (0.0, 0.0, 1.0);
+
+	//int		signChanger = 1;
+
+	//for (int loopVar = 0; loopVar < 6; loopVar ++)
+	//{
+	//	num [loopVar] = dot (corners [loopVar / 3], unitVectors [loopVar]);
+	//	den [loopVar] = dot (transformedRay.direction, unitVectors [loopVar]);
+
+	//	if (!den [loopVar])
+	//		t [loopVar] = -1;
+	//	else
+	//		t [loopVar] = num [loopVar] / den [loopVar];
+	//}
+
+	//corners [0] = vec3 (-0.5, -0.5, -0.5);
+	//corners [1] = vec3 (0.5, 0.5, 0.5);
+
+	//for (int loopVar = 0, counter = 0; loopVar < 6; loopVar ++)
+	//{
+	//	if (t [loopVar] == -1)
+	//		continue;
+
+	//	glm::vec3	interceptStart = transformedRay.origin + t [loopVar]*transformedRay.direction;
+	//	if (((interceptStart.x >= (corners [0].x-0.0001)) && (interceptStart.x <= (corners [1].x+0.0001))) &&
+	//		((interceptStart.y >= (corners [0].y-0.0001)) && (interceptStart.y <= (corners [1].y+0.0001))) &&
+	//		((interceptStart.z >= (corners [0].z-0.0001)) && (interceptStart.z <= (corners [1].z+0.0001))))
+	//		continue;
+	//	else
+	//		t [loopVar] = -1;
+	//}
+	//
+	//unsigned int minLoopVar = 0;
+	//min = 1e6;
+	//for (int loopVar = 0; loopVar < 6; loopVar ++)
+	//{
+	//	if (t [loopVar] == -1)
+	//		continue;
+	//	
+	//	if (min > t [loopVar])
+	//	{
+	//		min = t [loopVar];
+	//		minLoopVar = loopVar;
+	//	}
+	//}
+	//
+	//if (t [minLoopVar] < 0)
+	//	return -1;
+
+	//glm::vec3 iPt = transformedRay.origin+(t[minLoopVar]*transformedRay.direction);
+	//glm::vec4 intersectionPointInBodySpace = glm::vec4 (iPt.x, iPt.y, iPt.z, 1.0); 
+	//glm::vec4 normalTobeTransformed = glm::vec4 (unitVectors [minLoopVar].x, unitVectors [minLoopVar].y, unitVectors [minLoopVar].z, 0);
 	//normalTobeTransformed.x = normalArr [0];
 	//normalTobeTransformed.y = normalArr [1];
 	//normalTobeTransformed.z = normalArr [2];
 	//normalTobeTransformed.w = 0;
 
-	// Transform the intersection point to world space.
+	// Transform the intersection point & the normal to world space.
 	intersectionPoint = multiplyMV (box.transform, intersectionPointInBodySpace);
-	normal = multiplyMV (box.transform, normalTobeTransformed);
+	normal = multiplyMV (glm::transpose (box.inversetransform), normalTobeTransformed);
 
 	return glm::length (r.origin - intersectionPoint);
 }
