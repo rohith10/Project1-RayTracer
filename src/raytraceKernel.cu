@@ -146,7 +146,7 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: IMPLEMENT THIS FUNCTION
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, glm::vec3* textureArray, projectionInfo ProjectionParams){
+                            staticGeom* geoms, int numberOfGeoms, material* textureArray, projectionInfo ProjectionParams){
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -186,7 +186,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 					theRightIntercept.interceptVal = min;
 					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
+					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid].color;
 				}
 			}
 		}
@@ -201,7 +201,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 					theRightIntercept.interceptVal = min;
 					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
+					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid].color;
 				}
 			}
 		}
@@ -228,13 +228,13 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
 		float dotPdt = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0);
 		surfDiffuseColour = (theRightIntercept.intrMaterial * kd * dotPdt);
-		colors [index] += multiplyVV (textureArray [light.materialid], surfDiffuseColour);
+		colors [index] += multiplyVV (textureArray [light.materialid].color, surfDiffuseColour);
 
 		// Specular shading
-/*		glm::vec3 viewVec = cam.position - intrPoint;
+		glm::vec3 viewVec = cam.position - intrPoint;
 		glm::vec3 reflLightVec = reflectRay (-lightVec, theRightIntercept.intrNormal);
 		float specularDotPdt = max (glm::dot (reflLightVec, viewVec), (float)0);
-		colors [index] += (textureArray [light.materialid] * ks * pow (specularDotPdt, specEx));*/
+		colors [index] += (textureArray [light.materialid].color * ks * pow (specularDotPdt, textureArray [light.materialid].specularExponent));
 
 //		colors [index] += multiplyVV (textureArray [light->materialid] * diffuseSpecColour);
 	}
@@ -290,8 +290,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
   
-  glm::vec3		*materialColours = NULL;
-  cudaError_t returnCode = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(glm::vec3));
+  material		*materialColours = NULL;
+  cudaError_t returnCode = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(material));
   if (returnCode != cudaSuccess)
   {
 	  std::cout << "\nError while trying to send texture data to the GPU!";
@@ -310,13 +310,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  exit (EXIT_FAILURE);
   }
   else
-  {
-	  for (int loopVar = 0; loopVar < numberOfMaterials; ++loopVar)
-	  {
-		  glm::vec3 *index = materialColours+loopVar;
-		  cudaMemcpy( index, &(materials [loopVar].color), sizeof(glm::vec3), cudaMemcpyHostToDevice);
-	  }
-  }
+	  cudaMemcpy( materialColours, materials, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
 
   //package camera
   cameraData cam;
