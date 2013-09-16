@@ -84,7 +84,7 @@ struct interceptInfo
 {
 	float		interceptVal;
 	glm::vec3	intrNormal;
-	glm::vec3	intrMaterial;
+	material	intrMaterial;
 };
 
 #endif //CUDASTRUCTS_H

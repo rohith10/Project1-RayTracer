@@ -143,7 +143,7 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
   }
 }
 
-//TODO: IMPLEMENT THIS FUNCTION
+//TODO: Done!
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
                             staticGeom* geoms, int numberOfGeoms, material* textureArray, projectionInfo ProjectionParams){
@@ -170,7 +170,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	interceptInfo theRightIntercept;					// Stores the lowest intercept.
 	theRightIntercept.interceptVal = interceptValue;			// Initially, it is empty/invalid
 	theRightIntercept.intrNormal = intrNormal;		// Normal - 0,0,0
-	theRightIntercept.intrMaterial = intrPoint;		// Colour - black;
+//	theRightIntercept.intrMaterial = intrPoint;		// Colour - black;
 
 	float min = 1e6;
 	for (int i = 0; i < numberOfGeoms; ++i)
@@ -186,7 +186,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 					theRightIntercept.interceptVal = min;
 					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid].color;
+					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
 				}
 			}
 		}
@@ -201,7 +201,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 					theRightIntercept.interceptVal = min;
 					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid].color;
+					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
 				}
 			}
 		}
@@ -219,7 +219,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		lightPos = multiplyMV (light.transform, glm::vec4 (lightPos.x, lightPos.y, lightPos.z, 1.0));
 
 		// Ambient shading
-		colors [index] = glm::vec3 (ka * theRightIntercept.intrMaterial);
+		colors [index] = glm::vec3 (ka * theRightIntercept.intrMaterial.color);
 
 		glm::vec3 surfDiffuseColour;
 		glm::vec3 lightVec = glm::normalize (lightPos - intrPoint);
@@ -227,14 +227,16 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		// Diffuse shading
 		intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
 		float dotPdt = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0);
-		surfDiffuseColour = (theRightIntercept.intrMaterial * kd * dotPdt);
+		surfDiffuseColour = (theRightIntercept.intrMaterial.color * kd * dotPdt);
 		colors [index] += multiplyVV (textureArray [light.materialid].color, surfDiffuseColour);
 
 		// Specular shading
 		glm::vec3 viewVec = cam.position - intrPoint;
+		viewVec = glm::normalize (viewVec);
 		glm::vec3 reflLightVec = reflectRay (-lightVec, theRightIntercept.intrNormal);
+		reflLightVec = glm::normalize (reflLightVec);
 		float specularDotPdt = max (glm::dot (reflLightVec, viewVec), (float)0);
-		colors [index] += (textureArray [light.materialid].color * ks * pow (specularDotPdt, textureArray [light.materialid].specularExponent));
+		colors [index] += (theRightIntercept.intrMaterial.specularColor * ks * pow (specularDotPdt, theRightIntercept.intrMaterial.specularExponent));
 
 //		colors [index] += multiplyVV (textureArray [light->materialid] * diffuseSpecColour);
 	}
@@ -245,7 +247,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   }
 }
 
-//TODO: FINISH THIS FUNCTION
+//TODO: Almost Done!
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
 void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
   
