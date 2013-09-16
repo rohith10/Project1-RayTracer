@@ -108,11 +108,11 @@ EMITTANCE   15
 
 CAMERA
 RES         320 240
-FOVY        60
-ITERATIONS  5000
+FOVY        30
+ITERATIONS  20
 FILE        test.bmp
 frame 0
-EYE         0 0 12
+EYE         0 3 30
 VIEW        0 0 -1
 UP          0 1 0
 

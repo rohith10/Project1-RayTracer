@@ -205,6 +205,7 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 
 	// Define the constants. tnear = -INFINITY ; tfar = +INFINITY (+/- 1e6 for practical purposes)
 	float tnear = -1e6, tfar = 1e6;
+	float epsilon = 1e-3;
 
 	// Body space extremities.
 	float lowerLeftBack [3] = {-0.5, -0.5, -0.5};
@@ -228,9 +229,9 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	// For each X, Y and Z, check for intersections using the slab method as described above.
 	for (int loopVar = 0; loopVar < 3; loopVar ++)
 	{
-		if (fabs (transRayDirArr [loopVar]) < EPSILON)
+		if (fabs (transRayDirArr [loopVar]) < epsilon)
 		{
-			if ((transRayOrigArr [loopVar] < lowerLeftBack [loopVar]-EPSILON) && (transRayOrigArr [loopVar] > upperRightFront [loopVar]+EPSILON))
+			if ((transRayOrigArr [loopVar] < lowerLeftBack [loopVar]-epsilon) && (transRayOrigArr [loopVar] > upperRightFront [loopVar]+epsilon))
 				return -1;
 		}
 		else
@@ -285,18 +286,22 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	{	
 		float diff = intrPtBodySpaceArr [loopVar] - bodySpaceOrigArr [loopVar];
 		float diffAbs = fabs (diff);
-		if ((diffAbs >= 0.5-EPSILON) && (diffAbs <= 0.5+EPSILON))
+		if ((diffAbs >= 0.5-epsilon) && (diffAbs <= 0.5+epsilon))
 		{	
 			normalArr [loopVar] = diff / diffAbs;
 			break;
 		}
 	}
 
-	normal.x = normalArr [0];
-	normal.y = normalArr [1];
-	normal.z = normalArr [2];
+	glm::vec4 normalTobeTransformed;
+	normalTobeTransformed.x = normalArr [0];
+	normalTobeTransformed.y = normalArr [1];
+	normalTobeTransformed.z = normalArr [2];
+	normalTobeTransformed.w = 0;
+
 	// Transform the intersection point to world space.
 	intersectionPoint = multiplyMV (box.transform, intersectionPointInBodySpace);
+	normal = multiplyMV (box.transform, normalTobeTransformed);
 
 	return glm::length (r.origin - intersectionPoint);
 }

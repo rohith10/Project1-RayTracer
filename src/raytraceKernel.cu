@@ -45,8 +45,8 @@ void	setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3
 	glm::vec3	B = glm::cross (A, ProjectionParams.centreProj);
 	float		lenEyeToProjCentre = glm::length (eyeToProjCentre);
 	
-	ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((fov.x*degToRad) / 2.0);
-	ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((fov.y*degToRad) / 2.0);
+	ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((fov.x*degToRad));
+	ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((fov.y*degToRad));
 }
 
 //LOOK: This function demonstrates how to use thrust for random number generation on the GPU!
@@ -83,7 +83,7 @@ __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time
 
 
   float normDeviceX = (float)x / (resolution.x-1);
-  float normDeviceY = (float)y / (resolution.y-1);
+  float normDeviceY = 1 - ((float)y / (resolution.y-1));
 
   glm::vec3 P = /*ProjectionParams.*/centreProj + (2*normDeviceX - 1)*/*ProjectionParams.*/halfVecH + (2*normDeviceY - 1)*/*ProjectionParams.*/halfVecV;
   r.direction = glm::normalize (P - r.origin);
@@ -194,10 +194,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 				}
 			}
 		}
-	}
 
-	for (int i = 0; i < numberOfGeoms; ++i)
-	{
 		if (geoms [i].materialid == 8)
 			light = &geoms [i];
 	}
@@ -210,7 +207,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		//Diffuse shading
 		intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
 		glm::vec3 lightVec = light->translation - intrPoint;
-		float dotPdt = max (glm::dot (theRightIntercept.intrNormal, -lightVec), (float)0);
+		float dotPdt = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0);
 		colors [index] += glm::vec3 (textureArray [light->materialid].x * theRightIntercept.intrMaterial.x, 
 									textureArray [light->materialid].y * theRightIntercept.intrMaterial.y, 
 									textureArray [light->materialid].z * theRightIntercept.intrMaterial.z) * dotPdt;
@@ -232,8 +229,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   float degToRad = 3.1415926 / 180.0;
   ProjectionParams.centreProj = renderCam->positions [frame]+renderCam->views [frame];
 	glm::vec3	eyeToProjCentre = ProjectionParams.centreProj - renderCam->positions [frame];
-	glm::vec3	A = glm::cross (ProjectionParams.centreProj, renderCam->ups [frame]);
-	glm::vec3	B = glm::cross (A, ProjectionParams.centreProj);
+	glm::vec3	A = glm::cross (eyeToProjCentre, renderCam->ups [frame]);
+	glm::vec3	B = glm::cross (A, eyeToProjCentre);
 	float		lenEyeToProjCentre = glm::length (eyeToProjCentre);
 	
 	ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((renderCam->fov.x*degToRad) / 2.0);
@@ -281,6 +278,9 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  if (materialColours)
 		  cudaFree (materialColours);
 	  
+	  cudaimage = NULL;
+	  cudageoms = NULL;
+	  materialColours = NULL;
 	  exit (EXIT_FAILURE);
   }
   else
@@ -309,8 +309,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   //retrieve image from GPU
   cudaMemcpy( renderCam->image, cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 
-  // make certain the kernel has completed
-  cudaThreadSynchronize();
  // cudaPrintfDisplay (stdout, true);
  // cudaPrintfEnd ();
   //free up stuff, or else we'll leak memory like a madman
@@ -320,7 +318,15 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		cudaFree( cudageoms );
    if (materialColours)
 		cudaFree (materialColours);
-//  cudaFree( cudaimage );
+
+   cudaimage = NULL;
+   cudageoms = NULL;
+   materialColours = NULL;
+
+ // make certain the kernel has completed
+  cudaThreadSynchronize();
+  
+  //  cudaFree( cudaimage );
 //  cudaFree( cudageoms );
 //  cudaFree (materialColours);
   delete geomList;
