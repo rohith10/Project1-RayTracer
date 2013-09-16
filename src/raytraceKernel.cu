@@ -33,6 +33,7 @@ void checkCUDAError(const char *msg) {
   }
 } 
 
+//Sets up the projection half vectors.
 void	setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov)
 {
 	//Set up the projection variables:
@@ -47,6 +48,13 @@ void	setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3
 	
 	ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((fov.x*degToRad));
 	ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((fov.y*degToRad));
+}
+
+// Reflects the incidentRay around the normal.
+__host__ __device__ glm::vec3 reflectRay (glm::vec3 incidentRay, glm::vec3 normal)
+{
+	glm::vec3 reflectedRay = incidentRay - (2.0f*glm::dot (incidentRay, normal))*normal;
+	return reflectedRay;
 }
 
 //LOOK: This function demonstrates how to use thrust for random number generation on the GPU!
@@ -143,14 +151,17 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
-  staticGeom *light = NULL;
+  staticGeom light;
+  bool lightSet = false;
+
+  float ks = 0.3, ka = 0.2, kd = 1-ks-ka, specEx = 30.0;
 
   if((x<=resolution.x && y<=resolution.y))
   {
 	  ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
 					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
 //	
-	glm::vec3 materialColour = glm::vec3 (0, 0, 0);
+	glm::vec3 zeroVector = glm::vec3 (0, 0, 0);
 	glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
 	glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
 
@@ -196,25 +207,40 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		}
 
 		if (geoms [i].materialid == 8)
-			light = &geoms [i];
+		{	
+			light = geoms [i];
+			lightSet = true;
+		}
 	}
 
-	if ((light) && (theRightIntercept.interceptVal > 0))
+	if ((lightSet) && (theRightIntercept.interceptVal > 0))
 	{
-		// Ambient shading
-		colors [index] = glm::vec3 (0.25 * theRightIntercept.intrMaterial.x, 0.25 * theRightIntercept.intrMaterial.y, 0.25 * theRightIntercept.intrMaterial.z);
+		glm::vec3 lightPos = glm::vec3 (0, -0.5, 0);
+		lightPos = multiplyMV (light.transform, glm::vec4 (lightPos.x, lightPos.y, lightPos.z, 1.0));
 
-		//Diffuse shading
+		// Ambient shading
+		colors [index] = glm::vec3 (ka * theRightIntercept.intrMaterial);
+
+		glm::vec3 surfDiffuseColour;
+		glm::vec3 lightVec = glm::normalize (lightPos - intrPoint);
+		
+		// Diffuse shading
 		intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
-		glm::vec3 lightVec = light->translation - intrPoint;
 		float dotPdt = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0);
-		colors [index] += glm::vec3 (textureArray [light->materialid].x * theRightIntercept.intrMaterial.x, 
-									textureArray [light->materialid].y * theRightIntercept.intrMaterial.y, 
-									textureArray [light->materialid].z * theRightIntercept.intrMaterial.z) * dotPdt;
+		surfDiffuseColour = (theRightIntercept.intrMaterial * kd * dotPdt);
+		colors [index] += multiplyVV (textureArray [light.materialid], surfDiffuseColour);
+
+		// Specular shading
+/*		glm::vec3 viewVec = cam.position - intrPoint;
+		glm::vec3 reflLightVec = reflectRay (-lightVec, theRightIntercept.intrNormal);
+		float specularDotPdt = max (glm::dot (reflLightVec, viewVec), (float)0);
+		colors [index] += (textureArray [light.materialid] * ks * pow (specularDotPdt, specEx));*/
+
+//		colors [index] += multiplyVV (textureArray [light->materialid] * diffuseSpecColour);
 	}
 	else
 	{
-		colors[index] = materialColour;
+		colors[index] = zeroVector;
 	}
   }
 }

@@ -22,4 +22,7 @@
 
 void cudaRaytraceCore(uchar4* pos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms);
 void setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov);
+
+__host__ __device__ glm::vec3 reflectRay (glm::vec3 incidentRay, glm::vec3 normal);  
+
 #endif

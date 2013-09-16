@@ -20,6 +20,12 @@ __host__ __device__ glm::vec3 getPointOnRay(ray r, float t);
 //Multiplies a cudaMat4 matrix and a vec4 and returns a vec3 clipped from the vec4
 __host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec4 v);
 
+// Component-wise vector multiply function. Multiplies two vec3s.
+__host__ __device__ glm::vec3 multiplyVV(glm::vec3 a, glm::vec3 b);
+
+// Component-wise vector multiply. Multiplies two vec4s.
+__host__ __device__ glm::vec4 multiplyVV(glm::vec4 a, glm::vec4 b);
+
 //Gets sign of each component of a ray's inverse direction
 __host__ __device__ glm::vec3 getSignOfRay(ray r);
 
@@ -88,6 +94,25 @@ __host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec4 v){
   r.y = (m.y.x*v.x)+(m.y.y*v.y)+(m.y.z*v.z)+(m.y.w*v.w);
   r.z = (m.z.x*v.x)+(m.z.y*v.y)+(m.z.z*v.z)+(m.z.w*v.w);
   return r;
+}
+
+__host__ __device__ glm::vec3 multiplyVV(glm::vec3 a, glm::vec3 b)
+{
+	glm::vec3 r(0,0,0);
+	r.x = a.x * b.x;
+	r.y = a.y * b.y;
+	r.z = a.z * b.z;
+	return r;
+}
+
+__host__ __device__ glm::vec4 multiplyVV(glm::vec4 a, glm::vec4 b)
+{
+	glm::vec4 r(0,0,0,0);
+	r.x = a.x * b.x;
+	r.y = a.y * b.y;
+	r.z = a.z * b.z;
+	r.w = a.w * b.w;
+	return r;
 }
 
 __host__ __device__ glm::vec3 getInverseDirectionOfRay(ray r){
@@ -231,7 +256,7 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	{
 		if (fabs (transRayDirArr [loopVar]) < epsilon)
 		{
-			if ((transRayOrigArr [loopVar] < lowerLeftBack [loopVar]-epsilon) && (transRayOrigArr [loopVar] > upperRightFront [loopVar]+epsilon))
+			if ((transRayOrigArr [loopVar] < lowerLeftBack [loopVar]-epsilon) || (transRayOrigArr [loopVar] > upperRightFront [loopVar]+epsilon))
 				return -1;
 		}
 		else
@@ -239,23 +264,23 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 			float t1 = (lowerLeftBack [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
 			float t2 = (upperRightFront [loopVar] - transRayOrigArr [loopVar]) / transRayDirArr [loopVar];
 
-			if (t1 > t2)
+			if (t1 > t2+epsilon)
 			{
 				t2 += t1;
 				t1 = t2 - t1;
 				t2 -= t1;
 			}
 
-			if (tnear < t1)
+			if (tnear < t1-epsilon)
 				tnear = t1;
 
-			if (tfar > t2)
+			if (tfar > t2-epsilon)
 				tfar = t2;
 
-			if (tnear > tfar)
+			if (tnear > tfar+epsilon)
 				return -1;
 
-			if (tfar < 0)
+			if (tfar < 0-epsilon)
 				return -1;
 		}
 	}
