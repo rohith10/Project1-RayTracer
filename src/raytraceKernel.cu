@@ -77,23 +77,10 @@ __host__ __device__ ray raycastFromCameraKernel(glm::vec2 resolution, float time
   r.origin = eye;
   r.direction = glm::vec3(0,0,-1);
 
- // float	degToRad = 3.1415926 / 180.0;
- // float	radToDeg = 1.0 / degToRad;
-
-	//ProjectionParams.centreProj = eye+view;
-	//glm::vec3	eyeToProjCentre = ProjectionParams.centreProj - eye;
-	//glm::vec3	A = glm::cross (ProjectionParams.centreProj, up);
-	//glm::vec3	B = glm::cross (A, ProjectionParams.centreProj);
-	//float		lenEyeToProjCentre = glm::length (eyeToProjCentre);
-	//
-	//ProjectionParams.halfVecH = glm::normalize (A) * lenEyeToProjCentre * (float)tan ((fov.x*degToRad) / 2.0);
-	//ProjectionParams.halfVecV = glm::normalize (B) * lenEyeToProjCentre * (float)tan ((fov.y*degToRad) / 2.0);
-
-
   float normDeviceX = (float)x / (resolution.x-1);
   float normDeviceY = 1 - ((float)y / (resolution.y-1));
 
-  glm::vec3 P = /*ProjectionParams.*/centreProj + (2*normDeviceX - 1)*/*ProjectionParams.*/halfVecH + (2*normDeviceY - 1)*/*ProjectionParams.*/halfVecV;
+  glm::vec3 P = centreProj + (2*normDeviceX - 1)*halfVecH + (2*normDeviceY - 1)*halfVecV;
   r.direction = glm::normalize (P - r.origin);
 
   return r;
@@ -146,38 +133,41 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: Done!
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, material* textureArray, projectionInfo ProjectionParams){
+                            staticGeom* geoms, int numberOfGeoms, material* textureArray, projectionInfo ProjectionParams)
+{
+  /*__shared__*/ bool lightSet = false;
+  /*__shared__*/ staticGeom light;
+  /*__shared__*/ float ks = 0.3;
+  /*__shared__*/ float ka = 0.2;
+  /*__shared__*/ float kd = 1-ks-ka;
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
-  staticGeom light;
-  bool lightSet = false;
 
-  float ks = 0.3, ka = 0.2, kd = 1-ks-ka, specEx = 30.0;
+  glm::vec3 shadedColour;
 
   if((x<=resolution.x && y<=resolution.y))
   {
-	  ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
+    ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
 					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
-//	
-	glm::vec3 zeroVector = glm::vec3 (0, 0, 0);
+	
 	glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
 	glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
 
 	float interceptValue = -32767;
 
 	interceptInfo theRightIntercept;					// Stores the lowest intercept.
-	theRightIntercept.interceptVal = interceptValue;			// Initially, it is empty/invalid
-	theRightIntercept.intrNormal = intrNormal;		// Normal - 0,0,0
-//	theRightIntercept.intrMaterial = intrPoint;		// Colour - black;
+	theRightIntercept.interceptVal = interceptValue;	// Initially, it is empty/invalid
+	theRightIntercept.intrNormal = intrNormal;			// Intially, Normal - 0,0,0
 
 	float min = 1e6;
 	for (int i = 0; i < numberOfGeoms; ++i)
 	{
-		if (geoms [i].type == SPHERE)
+		staticGeom currentGeom = geoms [i];
+		if (currentGeom.type == SPHERE)
 		{	
-			interceptValue = sphereIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+			interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
 				if (interceptValue < min)
@@ -186,13 +176,13 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 					theRightIntercept.interceptVal = min;
 					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
+					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
 				}
 			}
 		}
-		else if (geoms [i].type == CUBE)
+		else if (currentGeom.type == CUBE)
 		{	
-			interceptValue = boxIntersectionTest(geoms [i], castRay, intrPoint, intrNormal);
+			interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
 			if (interceptValue > 0)
 			{
 				if (interceptValue < min)
@@ -201,50 +191,154 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 					theRightIntercept.interceptVal = min;
 					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [geoms [i].materialid];
+					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
 				}
 			}
 		}
 
-		if (geoms [i].materialid == 8)
-		{	
-			light = geoms [i];
-			lightSet = true;
-		}
+		if (!lightSet)
+			if (currentGeom.materialid == 8)
+			{
+				light = currentGeom;
+				lightSet = true;
+			}
 	}
 
 	if ((lightSet) && (theRightIntercept.interceptVal > 0))
 	{
-		glm::vec3 lightPos = glm::vec3 (0, -0.5, 0);
-		lightPos = multiplyMV (light.transform, glm::vec4 (lightPos.x, lightPos.y, lightPos.z, 1.0));
+		glm::vec3 lightVec = glm::vec3 (0, -0.5, 0);
+		lightVec = multiplyMV (light.transform, glm::vec4 (lightVec.x, lightVec.y, lightVec.z, 1.0));
+		// lightVec actually stores the light's position until here.
 
 		// Ambient shading
-		colors [index] = glm::vec3 (ka * theRightIntercept.intrMaterial.color);
+		shadedColour = glm::vec3 (ka * theRightIntercept.intrMaterial.color);
 
-		glm::vec3 surfDiffuseColour;
-		glm::vec3 lightVec = glm::normalize (lightPos - intrPoint);
-		
 		// Diffuse shading
 		intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
-		float dotPdt = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0);
-		surfDiffuseColour = (theRightIntercept.intrMaterial.color * kd * dotPdt);
-		colors [index] += multiplyVV (textureArray [light.materialid].color, surfDiffuseColour);
+		lightVec = glm::normalize (lightVec - intrPoint);	// Now it stores the vector pointing toward the light from the intersection point.
+		intrNormal = glm::normalize (cam.position - intrPoint); // Refurbish intrNormal for use as the view vector.
+		interceptValue = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0); // interceptValue is reused to compute dot product.
+		intrPoint = (theRightIntercept.intrMaterial.color * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
+		shadedColour += multiplyVV (textureArray [light.materialid].color, intrPoint);		
 
-		// Specular shading
-		glm::vec3 viewVec = cam.position - intrPoint;
-		viewVec = glm::normalize (viewVec);
+		// Specular shading	
 		glm::vec3 reflLightVec = reflectRay (-lightVec, theRightIntercept.intrNormal);
 		reflLightVec = glm::normalize (reflLightVec);
-		float specularDotPdt = max (glm::dot (reflLightVec, viewVec), (float)0);
-		colors [index] += (theRightIntercept.intrMaterial.specularColor * ks * pow (specularDotPdt, theRightIntercept.intrMaterial.specularExponent));
+		interceptValue = max (glm::dot (reflLightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
+		shadedColour += (textureArray [light.materialid].color * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
 
-//		colors [index] += multiplyVV (textureArray [light->materialid] * diffuseSpecColour);
+		colors [index] = shadedColour;
 	}
 	else
 	{
-		colors[index] = zeroVector;
+		colors[index] = glm::vec3 (0, 0, 0);
 	}
+
+	// TODO: ShadowRayUnblocked for Shadows!
   }
+}
+
+__device__ bool isShadowRayUnblocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, int nGeoms)
+{
+	float min = 1e6, interceptValue;
+	for (int i = 0; i < numberOfGeoms; ++i)
+	{
+		staticGeom currentGeom = geoms [i];
+		if (currentGeom.type == SPHERE)
+		{	
+			interceptValue = sphereIntersectionTest(currentGeom, r, intrPoint, intrNormal);
+			if (interceptValue > 0)
+			{
+				if (interceptValue < min)
+				{
+					min = interceptValue;
+
+					theRightIntercept.interceptVal = min;
+					theRightIntercept.intrNormal = intrNormal;
+					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
+				}
+			}
+		}
+		else if (currentGeom.type == CUBE)
+		{	
+			interceptValue = boxIntersectionTest(currentGeom, r, intrPoint, intrNormal);
+			if (interceptValue > 0)
+			{
+				if (interceptValue < min)
+				{
+					min = interceptValue;
+
+					theRightIntercept.interceptVal = min;
+					theRightIntercept.intrNormal = intrNormal;
+					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
+				}
+			}
+		}
+	}
+
+	if (glm::length (lightPos - r.origin) > interceptValue)
+		return true;
+	return false;
+}
+
+// At each pixel, trace a shadow ray to the light and see if it intersects something else.
+__global__ void		shadowFeeler (glm::vec3 startPoint, glm::vec3 lightPosition, glm::vec3 *colorBuffer, staticGeom *geoms, int nGeoms)
+{
+	;
+}
+
+// This function intersects a ray r with all the cubes in the scene and returns the lowest positive intersection value.
+__device__ float intersectRayWithCubes (ray r, staticGeom *cubesList, int nCubes)
+{
+	float min = -0.001;
+	for (int i = 0; i < nCubes; i ++)
+	{
+		staticGeom currentGeom = cubesList [i];
+		
+		interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
+		if (interceptValue < abs (min))
+		{
+			min = interceptValue;
+
+			theRightIntercept.interceptVal = min;
+			theRightIntercept.intrNormal = intrNormal;
+			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
+		}
+	}
+}
+
+// This funcion intersects a ray r with all the spheres in the scene and returns the lowest positive intersection value.
+__device__ float intersectRayWithSpheres (ray r, staticGeom *spheresList, int nSpheres)
+{
+	float min = -0.001;
+	for (int i = 0; i < nCubes; i ++)
+	{	
+		staticGeom currentGeom = cubesList [i];
+
+		interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
+		if (interceptValue <  abs (min))
+		{
+			min = interceptValue;
+
+			theRightIntercept.interceptVal = min;
+			theRightIntercept.intrNormal = intrNormal;
+			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
+		}
+	}
+}
+
+// Kernel for shading cubes.
+__global__ void		cubeShade  (glm::vec2 resolution, int nIteration, cameraData camDetails, int rayDepth, 
+								glm::vec3 *colorBuffer, staticGeom *cubesList, int nCubes, material *textureData, projectionInfo ProjParams)
+{
+	;
+}
+
+// Kernel for shading spheres.
+__global__ void		sphereShade  (glm::vec2 resolution, int nIteration, cameraData camDetails, int rayDepth, 
+								glm::vec3 *colorBuffer, staticGeom *spheresList, int nSpheres, material *textureData, projectionInfo ProjParams)
+{
+	;
 }
 
 //TODO: Almost Done!
