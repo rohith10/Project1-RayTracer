@@ -248,12 +248,13 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	}
 
 	// TODO: ShadowRayUnblocked for Shadows!
-	lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reflect the reflection of light ray around the intersection point to get the original lightVec back!
-	castRay.origin = intrPoint;
+	castRay.origin = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
+	lightVec = glm::normalize (lightPos - castRay.origin); // Reflect the reflection of light ray around the intersection point to get the original lightVec back!
 	castRay.direction = lightVec;
+	castRay.origin += ((float)0.1*lightVec);
 
-	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms))
-		colors[index] = glm::vec3 (0, 0, 0);
+//	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms))
+//		colors[index] = glm::vec3 (0, 0, 0);
   }
 }
 
