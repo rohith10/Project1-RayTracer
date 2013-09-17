@@ -87,4 +87,11 @@ struct interceptInfo
 	material	intrMaterial;
 };
 
+struct sceneInfo
+{
+	int		nCubes;
+	int		nSpheres;
+	int		nMeshes;
+};
+
 #endif //CUDASTRUCTS_H

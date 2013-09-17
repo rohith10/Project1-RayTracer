@@ -135,11 +135,23 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
                             staticGeom* geoms, int numberOfGeoms, material* textureArray, projectionInfo ProjectionParams)
 {
-  /*__shared__*/ bool lightSet = false;
-  /*__shared__*/ staticGeom light;
-  /*__shared__*/ float ks = 0.3;
-  /*__shared__*/ float ka = 0.2;
-  /*__shared__*/ float kd = 1-ks-ka;
+ // __shared__ bool lightSet;
+  __shared__ staticGeom light;
+  __shared__ float ks;
+  __shared__ float ka;
+  __shared__ float kd;
+  __shared__ lightPos;
+
+  if ((threadIdx.x == 0) && (threadIdx.y == 0))
+  {
+//	  lightSet = false;
+	  ks = 0.3;
+	  ka = 0.2;
+	  kd = 1-ks-ka;
+	  light = geom [0];
+	  lightPos = multiplyMV (light.transform, glm::vec4 (0, -0.5, 0, 1.0));
+  }
+  __syncthreads ();
 
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -162,6 +174,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	theRightIntercept.intrNormal = intrNormal;			// Intially, Normal - 0,0,0
 
 	float min = 1e6;
+	// TODO: Refactor code to have Cube and Sphere intersections in different loops.
 	for (int i = 0; i < numberOfGeoms; ++i)
 	{
 		staticGeom currentGeom = geoms [i];
@@ -196,18 +209,18 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 			}
 		}
 
-		if (!lightSet)
-			if (currentGeom.materialid == 8)
-			{
-				light = currentGeom;
-				lightSet = true;
-			}
+		//if (!lightSet)
+		//	if (currentGeom.materialid == 8)
+		//	{
+		//		light = currentGeom;
+		//		lightSet = true;
+		//	}
 	}
 
 	if ((lightSet) && (theRightIntercept.interceptVal > 0))
 	{
-		glm::vec3 lightVec = glm::vec3 (0, -0.5, 0);
-		lightVec = multiplyMV (light.transform, glm::vec4 (lightVec.x, lightVec.y, lightVec.z, 1.0));
+//		glm::vec3 lightVec = glm::vec3 (0, -0.5, 0);
+//		lightVec = multiplyMV (light.transform, glm::vec4 (lightVec.x, lightVec.y, lightVec.z, 1.0));
 		// lightVec actually stores the light's position until here.
 
 		// Ambient shading
@@ -215,16 +228,15 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 		// Diffuse shading
 		intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
-		lightVec = glm::normalize (lightVec - intrPoint);	// Now it stores the vector pointing toward the light from the intersection point.
+		glm::vec3 lightVec = glm::normalize (lightPos - intrPoint);	// Now it stores the vector pointing toward the light from the intersection point.
 		intrNormal = glm::normalize (cam.position - intrPoint); // Refurbish intrNormal for use as the view vector.
 		interceptValue = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0); // interceptValue is reused to compute dot product.
 		intrPoint = (theRightIntercept.intrMaterial.color * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
 		shadedColour += multiplyVV (textureArray [light.materialid].color, intrPoint);		
 
 		// Specular shading	
-		glm::vec3 reflLightVec = reflectRay (-lightVec, theRightIntercept.intrNormal);
-		reflLightVec = glm::normalize (reflLightVec);
-		interceptValue = max (glm::dot (reflLightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
+		lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reuse lightVec for storing the reflection of light ray around the normal.
+		interceptValue = max (glm::dot (lightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
 		shadedColour += (textureArray [light.materialid].color * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
 
 		colors [index] = shadedColour;
@@ -235,10 +247,16 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	}
 
 	// TODO: ShadowRayUnblocked for Shadows!
+	lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reflect the reflection of light ray around the intersection point to get the original lightVec back!
+	castRay.origin = intrPoint;
+	castRay.direction = lightVec;
+
+	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms);
+		colors[index] = glm::vec3 (0, 0, 0);
   }
 }
 
-__device__ bool isShadowRayUnblocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, int nGeoms)
+__device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, int nGeoms)
 {
 	float min = 1e6, interceptValue;
 	for (int i = 0; i < numberOfGeoms; ++i)
@@ -250,13 +268,7 @@ __device__ bool isShadowRayUnblocked (ray r, glm::vec3 lightPos, staticGeom *geo
 			if (interceptValue > 0)
 			{
 				if (interceptValue < min)
-				{
 					min = interceptValue;
-
-					theRightIntercept.interceptVal = min;
-					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-				}
 			}
 		}
 		else if (currentGeom.type == CUBE)
@@ -265,13 +277,7 @@ __device__ bool isShadowRayUnblocked (ray r, glm::vec3 lightPos, staticGeom *geo
 			if (interceptValue > 0)
 			{
 				if (interceptValue < min)
-				{
 					min = interceptValue;
-
-					theRightIntercept.interceptVal = min;
-					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-				}
 			}
 		}
 	}
@@ -370,18 +376,76 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   
   //package geometry and materials and sent to GPU
   staticGeom* geomList = new staticGeom[numberOfGeoms];
-  for(int i=0; i<numberOfGeoms; i++){
-    staticGeom newStaticGeom;
-    newStaticGeom.type = geoms[i].type;
-    newStaticGeom.materialid = geoms[i].materialid;
-    newStaticGeom.translation = geoms[i].translations[frame];
-    newStaticGeom.rotation = geoms[i].rotations[frame];
-    newStaticGeom.scale = geoms[i].scales[frame];
-    newStaticGeom.transform = geoms[i].transforms[frame];
-    newStaticGeom.inverseTransform = geoms[i].inverseTransforms[frame];
-    geomList[i] = newStaticGeom;
-  }
+  sceneInfo		primCounts;
   
+  int count = 1;
+  bool lightSet = false;
+  for(int i=0; i<numberOfGeoms; i++)
+  {
+	  if (geoms [i].type == CUBE)
+	  {
+		staticGeom newStaticGeom;
+		newStaticGeom.type = geoms[i].type;
+		newStaticGeom.materialid = geoms[i].materialid;
+		newStaticGeom.translation = geoms[i].translations[frame];
+		newStaticGeom.rotation = geoms[i].rotations[frame];
+		newStaticGeom.scale = geoms[i].scales[frame];
+		newStaticGeom.transform = geoms[i].transforms[frame];
+		newStaticGeom.inverseTransform = geoms[i].inverseTransforms[frame];
+		geomList[count] = newStaticGeom;
+		count ++;
+	  }
+
+	  if ((geoms [i].materialid == 8) && !lightSet)
+	  {
+		staticGeom newStaticGeom;
+		newStaticGeom.type = geoms[i].type;
+		newStaticGeom.materialid = geoms[i].materialid;
+		newStaticGeom.translation = geoms[i].translations[frame];
+		newStaticGeom.rotation = geoms[i].rotations[frame];
+		newStaticGeom.scale = geoms[i].scales[frame];
+		newStaticGeom.transform = geoms[i].transforms[frame];
+		newStaticGeom.inverseTransform = geoms[i].inverseTransforms[frame];
+		geomList[0] = newStaticGeom;
+		
+		lightSet = true;
+	  }
+  }
+
+  primCounts.nCubes = count;
+  
+  for(int i=0; i<numberOfGeoms; i++)
+  {
+	  if (geoms [i].type == SPHERE)
+	  {
+		staticGeom newStaticGeom;
+		newStaticGeom.type = geoms[i].type;
+		newStaticGeom.materialid = geoms[i].materialid;
+		newStaticGeom.translation = geoms[i].translations[frame];
+		newStaticGeom.rotation = geoms[i].rotations[frame];
+		newStaticGeom.scale = geoms[i].scales[frame];
+		newStaticGeom.transform = geoms[i].transforms[frame];
+		newStaticGeom.inverseTransform = geoms[i].inverseTransforms[frame];
+		geomList[count] = newStaticGeom;
+		count ++;
+	  }
+  }
+
+  primCounts.nSpheres = count - primCounts.nCubes;
+
+  if (!lightSet)
+  {
+		staticGeom newStaticGeom;
+		newStaticGeom.type = geoms[0].type;
+		newStaticGeom.materialid = geoms[0].materialid;
+		newStaticGeom.translation = geoms[0].translations[frame];
+		newStaticGeom.rotation = geoms[0].rotations[frame];
+		newStaticGeom.scale = geoms[0].scales[frame];
+		newStaticGeom.transform = geoms[0].transforms[frame];
+		newStaticGeom.inverseTransform = geoms[0].inverseTransforms[frame];
+		geomList[0] = newStaticGeom;
+  }
+
   staticGeom* cudageoms = NULL;
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
