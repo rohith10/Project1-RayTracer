@@ -107,12 +107,12 @@ RSCTCOEFF   0
 EMITTANCE   15
 
 CAMERA
-RES         400 300
+RES         320 320
 FOVY        25
 ITERATIONS  1
 FILE        test.bmp
 frame 0
-EYE         0 4.5 20
+EYE         0 4.5 22
 VIEW        0 0 -1
 UP          0 1 0
 
@@ -186,5 +186,5 @@ cube
 material 8 
 frame 0
 TRANS       0 10 0
-ROTAT       0 0 90
+ROTAT       0 0 0
 SCALE       3 3 3

@@ -249,12 +249,12 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	// TODO: ShadowRayUnblocked for Shadows!
 	castRay.origin = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
+	castRay.origin += ((float)0.001*theRightIntercept.intrNormal);
 	lightVec = glm::normalize (lightPos - castRay.origin); // Reflect the reflection of light ray around the intersection point to get the original lightVec back!
 	castRay.direction = lightVec;
-	castRay.origin += ((float)0.1*lightVec);
 
-//	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms))
-//		colors[index] = glm::vec3 (0, 0, 0);
+	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms))
+		colors[index] = glm::vec3 (0, 0, 0);
   }
 }
 
@@ -286,7 +286,7 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 	}
 
 //	if (min > 0)
-		if (glm::length (lightPos - r.origin) > min)
+		if (glm::length (lightPos - r.origin) > (min+0.001))
 			return true;
 	return false;
 }
