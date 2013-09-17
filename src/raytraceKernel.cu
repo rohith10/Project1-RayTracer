@@ -140,7 +140,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   __shared__ float ks;
   __shared__ float ka;
   __shared__ float kd;
-  __shared__ lightPos;
+  __shared__ glm::vec3 lightPos;
 
   if ((threadIdx.x == 0) && (threadIdx.y == 0))
   {
@@ -148,7 +148,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	  ks = 0.3;
 	  ka = 0.2;
 	  kd = 1-ks-ka;
-	  light = geom [0];
+	  light = geoms [0];
 	  lightPos = multiplyMV (light.transform, glm::vec4 (0, -0.5, 0, 1.0));
   }
   __syncthreads ();
@@ -217,7 +217,8 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		//	}
 	}
 
-	if ((lightSet) && (theRightIntercept.interceptVal > 0))
+	glm::vec3 lightVec;
+	if (theRightIntercept.interceptVal > 0)
 	{
 //		glm::vec3 lightVec = glm::vec3 (0, -0.5, 0);
 //		lightVec = multiplyMV (light.transform, glm::vec4 (lightVec.x, lightVec.y, lightVec.z, 1.0));
@@ -251,7 +252,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	castRay.origin = intrPoint;
 	castRay.direction = lightVec;
 
-	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms);
+	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms))
 		colors[index] = glm::vec3 (0, 0, 0);
   }
 }
@@ -259,9 +260,10 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, int nGeoms)
 {
 	float min = 1e6, interceptValue;
-	for (int i = 0; i < numberOfGeoms; ++i)
+	glm::vec3 intrPoint, intrNormal;
+	for (int i = 0; i < nGeoms; ++i)
 	{
-		staticGeom currentGeom = geoms [i];
+		staticGeom currentGeom = geomsList [i];
 		if (currentGeom.type == SPHERE)
 		{	
 			interceptValue = sphereIntersectionTest(currentGeom, r, intrPoint, intrNormal);
@@ -282,8 +284,9 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 		}
 	}
 
-	if (glm::length (lightPos - r.origin) > interceptValue)
-		return true;
+//	if (min > 0)
+		if (glm::length (lightPos - r.origin) > min)
+			return true;
 	return false;
 }
 
@@ -294,44 +297,44 @@ __global__ void		shadowFeeler (glm::vec3 startPoint, glm::vec3 lightPosition, gl
 }
 
 // This function intersects a ray r with all the cubes in the scene and returns the lowest positive intersection value.
-__device__ float intersectRayWithCubes (ray r, staticGeom *cubesList, int nCubes)
-{
-	float min = -0.001;
-	for (int i = 0; i < nCubes; i ++)
-	{
-		staticGeom currentGeom = cubesList [i];
-		
-		interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-		if (interceptValue < abs (min))
-		{
-			min = interceptValue;
+//__device__ float intersectRayWithCubes (ray r, staticGeom *cubesList, int nCubes)
+//{
+//	float min = -0.001;
+//	for (int i = 0; i < nCubes; i ++)
+//	{
+//		staticGeom currentGeom = cubesList [i];
+//		
+//		interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
+//		if (interceptValue < abs (min))
+//		{
+//			min = interceptValue;
+//
+//			theRightIntercept.interceptVal = min;
+//			theRightIntercept.intrNormal = intrNormal;
+//			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
+//		}
+//	}
+//}
 
-			theRightIntercept.interceptVal = min;
-			theRightIntercept.intrNormal = intrNormal;
-			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-		}
-	}
-}
-
-// This funcion intersects a ray r with all the spheres in the scene and returns the lowest positive intersection value.
-__device__ float intersectRayWithSpheres (ray r, staticGeom *spheresList, int nSpheres)
-{
-	float min = -0.001;
-	for (int i = 0; i < nCubes; i ++)
-	{	
-		staticGeom currentGeom = cubesList [i];
-
-		interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-		if (interceptValue <  abs (min))
-		{
-			min = interceptValue;
-
-			theRightIntercept.interceptVal = min;
-			theRightIntercept.intrNormal = intrNormal;
-			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-		}
-	}
-}
+//// This funcion intersects a ray r with all the spheres in the scene and returns the lowest positive intersection value.
+//__device__ float intersectRayWithSpheres (ray r, staticGeom *spheresList, int nSpheres)
+//{
+//	float min = -0.001;
+//	for (int i = 0; i < nCubes; i ++)
+//	{	
+//		staticGeom currentGeom = cubesList [i];
+//
+//		interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
+//		if (interceptValue <  abs (min))
+//		{
+//			min = interceptValue;
+//
+//			theRightIntercept.interceptVal = min;
+//			theRightIntercept.intrNormal = intrNormal;
+//			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
+//		}
+//	}
+//}
 
 // Kernel for shading cubes.
 __global__ void		cubeShade  (glm::vec2 resolution, int nIteration, cameraData camDetails, int rayDepth, 
@@ -382,20 +385,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   bool lightSet = false;
   for(int i=0; i<numberOfGeoms; i++)
   {
-	  if (geoms [i].type == CUBE)
-	  {
-		staticGeom newStaticGeom;
-		newStaticGeom.type = geoms[i].type;
-		newStaticGeom.materialid = geoms[i].materialid;
-		newStaticGeom.translation = geoms[i].translations[frame];
-		newStaticGeom.rotation = geoms[i].rotations[frame];
-		newStaticGeom.scale = geoms[i].scales[frame];
-		newStaticGeom.transform = geoms[i].transforms[frame];
-		newStaticGeom.inverseTransform = geoms[i].inverseTransforms[frame];
-		geomList[count] = newStaticGeom;
-		count ++;
-	  }
-
 	  if ((geoms [i].materialid == 8) && !lightSet)
 	  {
 		staticGeom newStaticGeom;
@@ -409,6 +398,20 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		geomList[0] = newStaticGeom;
 		
 		lightSet = true;
+	  }
+
+	  else if (geoms [i].type == CUBE)
+	  {
+		staticGeom newStaticGeom;
+		newStaticGeom.type = geoms[i].type;
+		newStaticGeom.materialid = geoms[i].materialid;
+		newStaticGeom.translation = geoms[i].translations[frame];
+		newStaticGeom.rotation = geoms[i].rotations[frame];
+		newStaticGeom.scale = geoms[i].scales[frame];
+		newStaticGeom.transform = geoms[i].transforms[frame];
+		newStaticGeom.inverseTransform = geoms[i].inverseTransforms[frame];
+		geomList[count] = newStaticGeom;
+		count ++;
 	  }
   }
 
