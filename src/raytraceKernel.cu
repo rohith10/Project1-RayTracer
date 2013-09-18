@@ -175,7 +175,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	float min = 1e6;
 	// TODO: Refactor code to have Cube and Sphere intersections in different loops.
-	for (int i = 1; i < objectCountInfo.nCubes; ++i)
+	for (int i = 0; i < objectCountInfo.nCubes; ++i)
 	{
 		staticGeom currentGeom = geoms [i];
 
