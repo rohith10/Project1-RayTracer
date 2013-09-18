@@ -245,94 +245,23 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   {
     ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
 					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
-	
-	//glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
-	//glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
 
-	//float interceptValue = -32767;
-
-	//interceptInfo theRightIntercept;					// Stores the lowest intercept.
-	//theRightIntercept.interceptVal = interceptValue;	// Initially, it is empty/invalid
-	//theRightIntercept.intrNormal = intrNormal;			// Intially, Normal - 0,0,0
-
-	//float min = 1e6;
-	//// Two different loops to intersect ray with cubes and spheres.
-	//for (int i = 0; i < objectCountInfo.nCubes; ++i)
-	//{
-	//	staticGeom currentGeom = geoms [i];
-
-	//	interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-	//	if (interceptValue > 0)
-	//	{
-	//		if (interceptValue < min)
-	//		{
-	//			min = interceptValue;
-
-	//			theRightIntercept.interceptVal = min;
-	//			theRightIntercept.intrNormal = intrNormal;
-	//			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-	//		}
-	//	}
-	//}
-
-	//for (int i = objectCountInfo.nCubes; i <= (objectCountInfo.nCubes+objectCountInfo.nSpheres); ++i)
-	//{
-	//	staticGeom currentGeom = geoms [i];
-
-	//	interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-	//	if (interceptValue > 0)
-	//	{
-	//		if (interceptValue < min)
-	//		{
-	//			min = interceptValue;
-
-	//			theRightIntercept.interceptVal = min;
-	//			theRightIntercept.intrNormal = intrNormal;
-	//			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-	//		}
-	//	}
-	//}
 	interceptInfo theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	glm::vec3 lightVec = glm::normalize (lightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
-	colors [index] = calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light);
-	//if (theRightIntercept.interceptVal > 0)
-	//{
-	//	// Ambient shading
-	//	shadedColour = ka * theRightIntercept.intrMaterial.color;
-
-	//	// Diffuse shading
-	//	glm::vec3 intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
-	//	glm::vec3 lightVec = glm::normalize (lightPos - intrPoint);	// Now it stores the vector pointing toward the light from the intersection point.
-	//	glm::vec3 intrNormal = glm::normalize (cam.position - intrPoint); // Refurbish intrNormal for use as the view vector.
-	//	float interceptValue = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0); // interceptValue is reused to compute dot product.
-	//	intrPoint = (theRightIntercept.intrMaterial.color * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
-	//	shadedColour += multiplyVV (textureArray [light.materialid].color, intrPoint);		
-
-	//	// Specular shading	
-	//	lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reuse lightVec for storing the reflection of light ray around the normal.
-	//	interceptValue = max (glm::dot (lightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
-	//	shadedColour += (textureArray [light.materialid].color * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
-
-	//	colors [index] = shadedColour;
-	//}
-	//else
-	//{
-	//	colors[index] = glm::vec3 (0, 0, 0);
-	//}
+	shadedColour = calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light);
 
 	// Shadow shading
 	// --------------
 	castRay.origin = castRay.origin + theRightIntercept.interceptVal*castRay.direction;	// Store the intersection point in castRay.
 	castRay.origin += ((float)0.001*theRightIntercept.intrNormal);		// Perturb it along the normal a slight distance to avoid self intersection.
-//	lightVec = glm::normalize (lightPos - castRay.origin);			// Reflect the reflection of light ray around the intersection point to get the original lightVec back!
 	castRay.direction = lightVec;
 
 	if (isShadowRayBlocked (castRay, lightPos, geoms, objectCountInfo))
-		colors[index] = glm::vec3 (0, 0, 0);
+		shadedColour = glm::vec3 (0, 0, 0);
 
-	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	// Specular reflection
 	// -------------------
+	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	castRay.origin -= ((float)0.001*theRightIntercept.intrNormal);	// Get back the intersection point.
 	castRay.direction = castRay.origin - cam.position;		// We have ray starting at camera and pointing toward intersection point
 	castRay.direction = glm::normalize (reflectRay (castRay.direction, theRightIntercept.intrNormal)); // Reflect around intersection normal to compute shade of reflections. 
@@ -340,9 +269,9 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	// Find the intersection point of reflected ray.
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	lightVec = glm::normalize (lightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
-	shadedColour = colors [index];
 	if (hasReflective)
 		shadedColour = ((shadedColour * (float)0.955) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light) * (float)0.045));
+
 	colors [index] = shadedColour;
   }
 }
