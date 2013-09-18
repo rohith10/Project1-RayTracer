@@ -330,6 +330,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	if (isShadowRayBlocked (castRay, lightPos, geoms, objectCountInfo))
 		colors[index] = glm::vec3 (0, 0, 0);
 
+	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	// Specular reflection
 	// -------------------
 	castRay.origin -= ((float)0.001*theRightIntercept.intrNormal);	// Get back the intersection point.
@@ -340,7 +341,8 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	lightVec = glm::normalize (lightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 	shadedColour = colors [index];
-	shadedColour = (shadedColour * (float)0.6) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light) * (float)0.4);
+	if (hasReflective)
+		shadedColour = (shadedColour * (float)0.6) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light) * (float)0.4);
 	colors [index] = shadedColour;
   }
 }
