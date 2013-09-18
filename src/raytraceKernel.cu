@@ -193,7 +193,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		}
 	}
 
-	for (int i = objectCountInfo.nCubes; i < objectCountInfo.nSpheres; ++i)
+	for (int i = objectCountInfo.nCubes; i <= (objectCountInfo.nCubes+objectCountInfo.nSpheres); ++i)
 	{
 		staticGeom currentGeom = geoms [i];
 
@@ -257,7 +257,7 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 	float min = 1e6, interceptValue;
 	glm::vec3 intrPoint, intrNormal;
 	
-	for (int i = 1; i < objectCountInfo.nCubes; ++i)
+	for (int i = 0; i < objectCountInfo.nCubes; ++i)
 	{
 		staticGeom currentGeom = geomsList [i];
 		interceptValue = boxIntersectionTest(currentGeom, r, intrPoint, intrNormal);
@@ -268,7 +268,7 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 		}
 	}
 
-	for (int i = objectCountInfo.nCubes; i < objectCountInfo.nSpheres; ++i)
+	for (int i = objectCountInfo.nCubes; i <= (objectCountInfo.nCubes+objectCountInfo.nSpheres); ++i)
 	{
 		staticGeom currentGeom = geomsList [i];
 		interceptValue = sphereIntersectionTest(currentGeom, r, intrPoint, intrNormal);
@@ -436,18 +436,18 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   primCounts.nSpheres = count - primCounts.nCubes;
 
-  if (!lightSet)
-  {
-		staticGeom newStaticGeom;
-		newStaticGeom.type = geoms[0].type;
-		newStaticGeom.materialid = geoms[0].materialid;
-		newStaticGeom.translation = geoms[0].translations[frame];
-		newStaticGeom.rotation = geoms[0].rotations[frame];
-		newStaticGeom.scale = geoms[0].scales[frame];
-		newStaticGeom.transform = geoms[0].transforms[frame];
-		newStaticGeom.inverseTransform = geoms[0].inverseTransforms[frame];
-		geomList[0] = newStaticGeom;
-  }
+  //if (!lightSet)
+  //{
+		//staticGeom newStaticGeom;
+		//newStaticGeom.type = geoms[0].type;
+		//newStaticGeom.materialid = geoms[0].materialid;
+		//newStaticGeom.translation = geoms[0].translations[frame];
+		//newStaticGeom.rotation = geoms[0].rotations[frame];
+		//newStaticGeom.scale = geoms[0].scales[frame];
+		//newStaticGeom.transform = geoms[0].transforms[frame];
+		//newStaticGeom.inverseTransform = geoms[0].inverseTransforms[frame];
+		//geomList[0] = newStaticGeom;
+  //}
 
   primCounts.nMeshes = 0;
 
