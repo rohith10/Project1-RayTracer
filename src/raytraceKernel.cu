@@ -133,7 +133,7 @@ __global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* 
 //TODO: Done!
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, int numberOfGeoms, material* textureArray, projectionInfo ProjectionParams)
+                            staticGeom* geoms, sceneInfo objectCountInfo, material* textureArray, projectionInfo ProjectionParams)
 {
  // __shared__ bool lightSet;
   __shared__ staticGeom light;
@@ -175,46 +175,40 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	float min = 1e6;
 	// TODO: Refactor code to have Cube and Sphere intersections in different loops.
-	for (int i = 0; i < numberOfGeoms; ++i)
+	for (int i = 1; i < objectCountInfo.nCubes; ++i)
 	{
 		staticGeom currentGeom = geoms [i];
-		if (currentGeom.type == SPHERE)
-		{	
-			interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-			if (interceptValue > 0)
-			{
-				if (interceptValue < min)
-				{
-					min = interceptValue;
 
-					theRightIntercept.interceptVal = min;
-					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-				}
+		interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
+		if (interceptValue > 0)
+		{
+			if (interceptValue < min)
+			{
+				min = interceptValue;
+
+				theRightIntercept.interceptVal = min;
+				theRightIntercept.intrNormal = intrNormal;
+				theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
 			}
 		}
-		else if (currentGeom.type == CUBE)
-		{	
-			interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-			if (interceptValue > 0)
-			{
-				if (interceptValue < min)
-				{
-					min = interceptValue;
+	}
 
-					theRightIntercept.interceptVal = min;
-					theRightIntercept.intrNormal = intrNormal;
-					theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-				}
+	for (int i = objectCountInfo.nCubes; i < objectCountInfo.nSpheres; ++i)
+	{
+		staticGeom currentGeom = geoms [i];
+
+		interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
+		if (interceptValue > 0)
+		{
+			if (interceptValue < min)
+			{
+				min = interceptValue;
+
+				theRightIntercept.interceptVal = min;
+				theRightIntercept.intrNormal = intrNormal;
+				theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
 			}
 		}
-
-		//if (!lightSet)
-		//	if (currentGeom.materialid == 8)
-		//	{
-		//		light = currentGeom;
-		//		lightSet = true;
-		//	}
 	}
 
 	glm::vec3 lightVec;
@@ -253,35 +247,35 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	lightVec = glm::normalize (lightPos - castRay.origin); // Reflect the reflection of light ray around the intersection point to get the original lightVec back!
 	castRay.direction = lightVec;
 
-	if (isShadowRayBlocked (castRay, lightPos, geoms, numberOfGeoms))
+	if (isShadowRayBlocked (castRay, lightPos, geoms, objectCountInfo))
 		colors[index] = glm::vec3 (0, 0, 0);
   }
 }
 
-__device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, int nGeoms)
+__device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, sceneInfo objectCountInfo)
 {
 	float min = 1e6, interceptValue;
 	glm::vec3 intrPoint, intrNormal;
-	for (int i = 0; i < nGeoms; ++i)
+	
+	for (int i = 1; i < objectCountInfo.nCubes; ++i)
 	{
 		staticGeom currentGeom = geomsList [i];
-		if (currentGeom.type == SPHERE)
-		{	
-			interceptValue = sphereIntersectionTest(currentGeom, r, intrPoint, intrNormal);
-			if (interceptValue > 0)
-			{
-				if (interceptValue < min)
-					min = interceptValue;
-			}
+		interceptValue = boxIntersectionTest(currentGeom, r, intrPoint, intrNormal);
+		if (interceptValue > 0)
+		{
+			if (interceptValue < min)
+				min = interceptValue;
 		}
-		else if (currentGeom.type == CUBE)
-		{	
-			interceptValue = boxIntersectionTest(currentGeom, r, intrPoint, intrNormal);
-			if (interceptValue > 0)
-			{
-				if (interceptValue < min)
-					min = interceptValue;
-			}
+	}
+
+	for (int i = objectCountInfo.nCubes; i < objectCountInfo.nSpheres; ++i)
+	{
+		staticGeom currentGeom = geomsList [i];
+		interceptValue = sphereIntersectionTest(currentGeom, r, intrPoint, intrNormal);
+		if (interceptValue > 0)
+		{
+			if (interceptValue < min)
+				min = interceptValue;
 		}
 	}
 
@@ -416,6 +410,11 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  }
   }
 
+  if (!lightSet)
+  {
+	  geomList [0] = geomList [count-1];
+	  count --;
+  }
   primCounts.nCubes = count;
   
   for(int i=0; i<numberOfGeoms; i++)
@@ -449,6 +448,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		newStaticGeom.inverseTransform = geoms[0].inverseTransforms[frame];
 		geomList[0] = newStaticGeom;
   }
+
+  primCounts.nMeshes = 0;
 
   staticGeom* cudageoms = NULL;
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
@@ -486,7 +487,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
 //  cudaPrintfInit ();
   //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, numberOfGeoms, materialColours, ProjectionParams);
+  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, primCounts, materialColours, ProjectionParams);
   
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
 

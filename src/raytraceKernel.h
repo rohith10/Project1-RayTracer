@@ -24,6 +24,6 @@ void cudaRaytraceCore(uchar4* pos, camera* renderCam, int frame, int iterations,
 void setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov);
 
 __host__ __device__ glm::vec3 reflectRay (glm::vec3 incidentRay, glm::vec3 normal);  
-__device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, int nGeoms);
+__device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, sceneInfo objectCountInfo);
 
 #endif
