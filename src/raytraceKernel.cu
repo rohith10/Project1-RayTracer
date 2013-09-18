@@ -231,7 +231,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	  ka = 0.2;
 	  kd = 1-ks-ka;
 	  light = geoms [0];
-	  lightPos = multiplyMV (light.transform, glm::vec4 (0, -0.5, 0, 1.0));
+	  lightPos = multiplyMV (light.transform, glm::vec4 (0, -0.6, 0, 1.0));
   }
   __syncthreads ();
 
@@ -270,7 +270,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	lightVec = glm::normalize (lightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 	if (hasReflective)
-		shadedColour = ((shadedColour * (float)0.955) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light) * (float)0.045));
+		shadedColour = ((shadedColour * (float)0.8) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light) * (float)0.2));
 
 	colors [index] = shadedColour;
   }
