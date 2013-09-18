@@ -205,7 +205,7 @@ __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 light
 		intrPoint = (theRightIntercept.intrMaterial.color * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
 		shadedColour += multiplyVV (textureArray [light.materialid].color, intrPoint);		
 
-		// Specular shading	
+		// Specular shading	-- TODO: Diffuse surfaces need not be shaded specular - maybe this is why diffuse surfaces are being seen as flat shaded!
 		lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reuse lightVec for storing the reflection of light ray around the normal.
 		interceptValue = max (glm::dot (lightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
 		shadedColour += (textureArray [light.materialid].color * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
@@ -342,7 +342,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	lightVec = glm::normalize (lightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 	shadedColour = colors [index];
 	if (hasReflective)
-		shadedColour = (shadedColour * (float)0.6) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light) * (float)0.4);
+		shadedColour = ((shadedColour * (float)0.955) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, light) * (float)0.045));
 	colors [index] = shadedColour;
   }
 }
