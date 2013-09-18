@@ -314,6 +314,7 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 		if ((diffAbs >= 0.5-epsilon) && (diffAbs <= 0.5+epsilon))
 		{	
 			normalArr [loopVar] = diff / diffAbs;
+//			normalArr [loopVar] /= normalArr [loopVar];	 // Just to be super certain that our normals have value of 1.0 in any direction.
 			break;
 		}
 	}
