@@ -2,8 +2,10 @@
 ###################
 PROJ1_WIN/ipch/*
 PROJ1_WIN/Debug/*
+PROJ1_WIN/Debug (v5.5)/*
 PROJ1_WIN/Release/*
 PROJ1_WIN/565Raytracer/Debug/*
+PROJ1_WIN/565Raytracer/Debug (v5.5)/*
 PROJ1_WIN/565Raytracer/Release/*
 PROJ1_WIN/565Raytracer/Win32/*
 
@@ -41,6 +43,7 @@ PROJ1_WIN/565Raytracer/Win32/*
 *.sql
 *.sqlite
 *.sdf
+*.pdb
 
 # OS generated files #
 ######################
