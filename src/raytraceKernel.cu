@@ -267,27 +267,28 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	castRay.direction = glm::normalize (reflectRay (castRay.direction, theRightIntercept.intrNormal)); // Reflect around intersection normal to compute shade of reflections. 
 	
 	// Find the intersection point of reflected ray.
+	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	lightVec = glm::normalize (multiplyMV (light.transform, lightPos) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
-	if (theRightIntercept.intrMaterial.hasReflective)
+	if (hasReflective)
 		shadedColour = ((shadedColour * (float)0.92) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol) * (float)0.08));
 
 	// Shadow shading
 	// --------------
 //	castRay.origin = castRay.origin + theRightIntercept.interceptVal*castRay.direction;	// Store the intersection point in castRay.
-	castRay.origin += ((float)0.001*theRightIntercept.intrNormal);		// Perturb it along the normal a slight distance to avoid self intersection.
-	
-	glm::vec3 shadowColour = glm::vec3 (0);
-	for (int i = 0; i < nLights; ++ i)
-	{
-		lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + (((i%3)-1)*0.5), lightPos.y, lightPos.z + (((i/3)-1)*0.5), 1.0));
-		castRay.direction = glm::normalize (lightVec - castRay.origin);
+	//castRay.origin += ((float)0.001*theRightIntercept.intrNormal);		// Perturb it along the normal a slight distance to avoid self intersection.
+	//
+	//glm::vec3 shadowColour = glm::vec3 (0);
+	//for (int i = 0; i < nLights; ++ i)
+	//{
+	//	lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + (((i%3)-1)*0.5), lightPos.y, lightPos.z + (((i/3)-1)*0.5), 1.0));
+	//	castRay.direction = glm::normalize (lightVec - castRay.origin);
 
-		if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
-			shadowColour += (float)0.1 * theRightIntercept.intrMaterial.color;
-	}
-	if ((shadowColour.x != 0) || (shadowColour.y != 0) || (shadowColour.z != 0))
-		shadedColour = shadowColour/nLights;
+	//	if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
+	//		shadowColour += (float)0.1 * theRightIntercept.intrMaterial.color;
+	//}
+	//if ((shadowColour.x != 0) || (shadowColour.y != 0) || (shadowColour.z != 0))
+	//	shadedColour = shadowColour/nLights;
 
 	colors [index] = shadedColour;
   }
