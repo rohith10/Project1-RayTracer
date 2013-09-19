@@ -19,6 +19,7 @@ __host__ __device__ glm::vec3 getPointOnRay(ray r, float t);
 //This is a workaround for GLM matrix multiplication not working properly on pre-Fermi NVIDIA GPUs.
 //Multiplies a cudaMat4 matrix and a vec4 and returns a vec3 clipped from the vec4
 __host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec4 v);
+__host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec3 v, bool isVector = false);
 
 // Component-wise vector multiply function. Multiplies two vec3s.
 __host__ __device__ glm::vec3 multiplyVV(glm::vec3 a, glm::vec3 b);
@@ -93,6 +94,20 @@ __host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec4 v){
   r.x = (m.x.x*v.x)+(m.x.y*v.y)+(m.x.z*v.z)+(m.x.w*v.w);
   r.y = (m.y.x*v.x)+(m.y.y*v.y)+(m.y.z*v.z)+(m.y.w*v.w);
   r.z = (m.z.x*v.x)+(m.z.y*v.y)+(m.z.z*v.z)+(m.z.w*v.w);
+  return r;
+}
+
+__host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec3 v, bool isVector)
+{
+  float w;
+  if (isVector)
+	  w = 0;
+  else
+	  w = 1;
+  glm::vec3 r(1,1,1);
+  r.x = (m.x.x*v.x)+(m.x.y*v.y)+(m.x.z*v.z)+(m.x.w*w);
+  r.y = (m.y.x*v.x)+(m.y.y*v.y)+(m.y.z*v.z)+(m.y.w*w);
+  r.z = (m.z.x*v.x)+(m.z.y*v.y)+(m.z.z*v.z)+(m.z.w*w);
   return r;
 }
 
