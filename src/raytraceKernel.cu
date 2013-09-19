@@ -227,6 +227,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
   __shared__ glm::vec3 lightCol;
   __shared__ float nLights;
   __shared__ int sqrtLights;
+  __shared__ float stepSize;
 
   if ((threadIdx.x == 0) && (threadIdx.y == 0))
   {
@@ -235,6 +236,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	  kd = 1-ks-ka;
 	  nLights = 64;
 	  sqrtLights = sqrt (nLights);
+	  stepSize = 1.0/(sqrtLights-1);
 	  light = geoms [0];
 	  lightPos = /*multiplyMV (light.transform, */glm::vec3 (-0.5, -0.6, -0.5)/*)*/;
 	  lightCol = (textureArray [light.materialid].color/* * textureArray [light.materialid].emittance*/);
@@ -256,7 +258,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	glm::vec3 lightVec; 
 	for (int i = 0; i < nLights; ++ i)
 	{
-		lightVec = glm::normalize (multiplyMV (light.transform, glm::vec4 (lightPos.x + (((i%sqrtLights)-1)*(1.0/(sqrtLights-1)), lightPos.y, lightPos.z + (((i/sqrtLights)-1)*(1.0/(sqrtLights-1)), 1.0)) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
+		lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x + ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
 //		lightVec = glm::normalize (multiplyMV (light.transform, lightPos) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 		shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
 	}
@@ -284,7 +286,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	glm::vec3 shadowColour = glm::vec3 (0);
 	for (int i = 0; i < nLights; ++ i)
 	{
-		lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + ((i%sqrtLights)*(1.0/(sqrtLights-1))), lightPos.y, lightPos.z + ((i/sqrtLights)*(1.0/(sqrtLights-1))), 1.0));
+		lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize), 1.0));
 		castRay.direction = glm::normalize (lightVec - castRay.origin);
 
 		if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
