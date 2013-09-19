@@ -205,7 +205,7 @@ __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 light
 		intrPoint = (theRightIntercept.intrMaterial.color * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
 		shadedColour += multiplyVV (/*textureArray [light.materialid].color*/lightCol, intrPoint);		
 
-		// Specular shading	-- TODO: Diffuse surfaces need not be shaded specular - maybe this is why diffuse surfaces are being seen as flat shaded!
+		// Specular shading
 		lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reuse lightVec for storing the reflection of light ray around the normal.
 		interceptValue = max (glm::dot (lightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
 		shadedColour += (/*textureArray [light.materialid].color*/lightCol * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
@@ -276,19 +276,20 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	// Shadow shading
 	// --------------
 //	castRay.origin = castRay.origin + theRightIntercept.interceptVal*castRay.direction;	// Store the intersection point in castRay.
-	//castRay.origin += ((float)0.001*theRightIntercept.intrNormal);		// Perturb it along the normal a slight distance to avoid self intersection.
-	//
-	//glm::vec3 shadowColour = glm::vec3 (0);
-	//for (int i = 0; i < nLights; ++ i)
-	//{
-	//	lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + (((i%3)-1)*0.5), lightPos.y, lightPos.z + (((i/3)-1)*0.5), 1.0));
-	//	castRay.direction = glm::normalize (lightVec - castRay.origin);
+	castRay.origin += ((float)0.001*theRightIntercept.intrNormal);		// Perturb it along the normal a slight distance to avoid self intersection.
+	
+	glm::vec3 shadowColour = glm::vec3 (0);
+	for (int i = 0; i < nLights; ++ i)
+	{
+		lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + (((i%3)-1)*0.5), lightPos.y, lightPos.z + (((i/3)-1)*0.5), 1.0));
+		castRay.direction = glm::normalize (lightVec - castRay.origin);
 
-	//	if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
-	//		shadowColour += (float)0.1 * theRightIntercept.intrMaterial.color;
-	//}
-	//if ((shadowColour.x != 0) || (shadowColour.y != 0) || (shadowColour.z != 0))
-	//	shadedColour = shadowColour/nLights;
+		if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
+			shadowColour += (float)0.1 * theRightIntercept.intrMaterial.color;
+		else
+			shadowColour += shadedColour;
+	}
+	shadedColour = shadowColour/nLights;
 
 	colors [index] = shadedColour;
   }
