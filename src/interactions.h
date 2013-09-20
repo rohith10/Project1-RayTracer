@@ -91,8 +91,8 @@ __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(glm::vec3 nor
 //This should be much easier than if you had to implement calculateRandomDirectionInHemisphere.
 __host__ __device__ glm::vec3 getRandomDirectionInSphere(float xi1, float xi2) {
   
-	float sinTheta = xi1;
-	float cosTheta = sqrt (1 - sinTheta*sinTheta);
+	float cosTheta = 2*xi1 - 1;		// Spread out xi1 in [0,1] to [-1, 1]. 
+	float sinTheta = sqrt (1 - cosTheta*cosTheta);
 	float phi = TWO_PI * xi2;
 
 	return glm::vec3(sinTheta*cos(phi), sinTheta*sin(phi), cosTheta);

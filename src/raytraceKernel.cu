@@ -253,20 +253,12 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	interceptInfo theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	glm::vec3 lightVec; 
-//	ray rayCastFromIntrPtToLight;
-//	rayCastFromIntrPtToLight.origin = castRay.origin + castRay.direction * (float)(theRightIntercept.interceptVal-0.001); 
 	for (int i = 0; i < nLights; ++ i)
 	{
 		glm::vec3 tmpLightPos = multiplyMV (light.transform, glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)));
 		lightVec = glm::normalize (tmpLightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
-//		rayCastFromIntrPtToLight.direction = glm::normalize (tmpLightPos - rayCastFromIntrPtToLight.origin);
-//		if (isShadowRayBlocked (rayCastFromIntrPtToLight, tmpLightPos, geoms, objectCountInfo))
-//			shadedColour += ka * theRightIntercept.intrMaterial.color;
-//		else
-			shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
+		shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
 	}
-//	lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x/* + ((i%sqrtLights)*stepSize)*/, lightPos.y, lightPos.z+ (sqrtLights/2)/* + ((i/sqrtLights)*stepSize)*/) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
-//	shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
 
 	shadedColour /= nLights;
 	glm::vec3 rightnormal = theRightIntercept.intrNormal;
@@ -340,50 +332,69 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 }
 
 // At each pixel, trace a shadow ray to the light and see if it intersects something else.
-__global__ void		shadowFeeler (glm::vec3 startPoint, glm::vec3 lightPosition, glm::vec3 *colorBuffer, staticGeom *geoms, int nGeoms)
+__global__ void		shadowFeeler (glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
+                            staticGeom* geoms, sceneInfo objectCountInfo, material* textureArray, projectionInfo ProjectionParams, 
+							renderInfo* renderParams)
 {
-	;
+	__shared__ staticGeom light;
+	__shared__ float ks;
+	__shared__ float ka;
+	__shared__ float kd;
+	__shared__ glm::vec3 lightPos;
+	__shared__ glm::vec3 lightCol;
+	__shared__ float nLights;
+	__shared__ int sqrtLights;
+	__shared__ float stepSize;
+
+	if ((threadIdx.x == 0) && (threadIdx.y == 0))
+	{
+		ks = renderParams->ks;
+		ka = renderParams->ka;
+		kd = renderParams->kd;
+		nLights = renderParams->nLights;
+		sqrtLights = renderParams->sqrtLights;
+		stepSize = renderParams->stepSize;
+		light = geoms [0];
+		lightPos = renderParams->lightPos;
+		lightCol = renderParams->lightCol;
+	}
+	__syncthreads ();
+
+	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
+	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
+    int index = x + (y * resolution.x);
+	
+	if ((x <= resolution.x) && (y <= resolution.y)) 
+	{
+		ray castRay = raycastFromCameraKernel(resolution, time, x, y, cam.position, cam.view, cam.up, cam.fov, 
+					ProjectionParams.centreProj, ProjectionParams.halfVecH, ProjectionParams.halfVecV);
+
+		interceptInfo theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
+		glm::vec3 lightVec; 
+	
+	//	Shadow shading
+	//	--------------
+		// Perturb the intersection pt along the normal a slight distance to avoid self intersection. 
+		castRay.origin += (castRay.direction * (theRightIntercept.interceptVal - 0.001));
+															
+		glm::vec3 shadedColour = colour [index];
+		glm::vec3 shadowColour = glm::vec3 (0);
+		for (int i = 0; i < nLights; ++ i)
+		{
+			lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize), 1.0));
+			castRay.direction = glm::normalize (lightVec - castRay.origin);
+
+			if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
+				shadowColour += ka * theRightIntercept.intrMaterial.color;	// If point in shadow, add ambient colour to shadowColour
+			else
+				shadowColour += shadedColour;								// Otherwise, add the computed shade.
+		}
+		shadedColour = shadowColour/nLights;
+
+		colors [index] = shadedColour;
+	}
+  }
 }
-
-// This function intersects a ray r with all the cubes in the scene and returns the lowest positive intersection value.
-//__device__ float intersectRayWithCubes (ray r, staticGeom *cubesList, int nCubes)
-//{
-//	float min = -0.001;
-//	for (int i = 0; i < nCubes; i ++)
-//	{
-//		staticGeom currentGeom = cubesList [i];
-//		
-//		interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-//		if (interceptValue < abs (min))
-//		{
-//			min = interceptValue;
-//
-//			theRightIntercept.interceptVal = min;
-//			theRightIntercept.intrNormal = intrNormal;
-//			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-//		}
-//	}
-//}
-
-//// This funcion intersects a ray r with all the spheres in the scene and returns the lowest positive intersection value.
-//__device__ float intersectRayWithSpheres (ray r, staticGeom *spheresList, int nSpheres)
-//{
-//	float min = -0.001;
-//	for (int i = 0; i < nCubes; i ++)
-//	{	
-//		staticGeom currentGeom = cubesList [i];
-//
-//		interceptValue = sphereIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
-//		if (interceptValue <  abs (min))
-//		{
-//			min = interceptValue;
-//
-//			theRightIntercept.interceptVal = min;
-//			theRightIntercept.intrNormal = intrNormal;
-//			theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
-//		}
-//	}
-//}
 
 // Kernel for shading cubes.
 __global__ void		cubeShade  (glm::vec2 resolution, int nIteration, cameraData camDetails, int rayDepth, 
@@ -442,7 +453,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   staticGeom* geomList = new staticGeom[numberOfGeoms];
   sceneInfo		primCounts;
   
-  int count = 1;
+  int count = 1;	int lightIndex = 0;
   bool lightSet = false;
   for(int i=0; i<numberOfGeoms; i++)
   {
@@ -459,6 +470,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		geomList[0] = newStaticGeom;
 		
 		lightSet = true;
+		lightIndex = i;
 	  }
 
 	  else if (geoms [i].type == CUBE)
@@ -542,6 +554,16 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   }
   else
 	  cudaMemcpy( materialColours, materials, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
+
+  renderInfo	RenderParams;
+  RenderParams.kd;
+  RenderParams.ka;
+  RenderParams.ks;
+  RenderParams.nLights = 25;
+  RenderParams.sqrtLights = sqrt (RenderParams.nLights);
+  RenderParams.lightStepSize =  = 1.0/(sqrtLights-1);
+  RenderParams.lightPos = glm::vec3 (-0.5, -0.6, -0.5);
+  RenderParams.lightCol = materials [geoms [lightIndex].materialid].color;
 
   //package camera
   cameraData cam;
