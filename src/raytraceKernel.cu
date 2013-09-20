@@ -230,15 +230,15 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
   if ((threadIdx.x == 0) && (threadIdx.y == 0))
   {
-	  ks = 0.4;
+	  ks = 0.5;
 	  ka = 0.1;
 	  kd = 1-ks-ka;
-	  nLights = 25;
+	  nLights = 36;
 	  sqrtLights = sqrt (nLights);
 	  stepSize = 1.0/(sqrtLights-1);
 	  light = geoms [0];
-	  lightPos = /*multiplyMV (light.transform, */glm::vec3 (-0.5, -0.55, -0.5)/*)*/;
-	  lightCol = (textureArray [light.materialid].color/* * textureArray [light.materialid].emittance*/);
+	  lightPos = /*multiplyMV (light.transform, */glm::vec3 (-0.5, -0.6, -0.5)/*)*/;
+	  lightCol = (textureArray [light.materialid].color /** textureArray [light.materialid].emittance*/);
   }
   __syncthreads ();
 
@@ -255,10 +255,17 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	interceptInfo theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	glm::vec3 lightVec; 
+//	ray rayCastFromIntrPtToLight;
+//	rayCastFromIntrPtToLight.origin = castRay.origin + castRay.direction * (float)(theRightIntercept.interceptVal-0.001); 
 	for (int i = 0; i < nLights; ++ i)
 	{
-		lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
-		shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
+		glm::vec3 tmpLightPos = multiplyMV (light.transform, glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)));
+		lightVec = glm::normalize (tmpLightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
+//		rayCastFromIntrPtToLight.direction = glm::normalize (tmpLightPos - rayCastFromIntrPtToLight.origin);
+//		if (isShadowRayBlocked (rayCastFromIntrPtToLight, tmpLightPos, geoms, objectCountInfo))
+//			shadedColour += ka * theRightIntercept.intrMaterial.color;
+//		else
+			shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
 	}
 //	lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x/* + ((i%sqrtLights)*stepSize)*/, lightPos.y, lightPos.z+ (sqrtLights/2)/* + ((i/sqrtLights)*stepSize)*/) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
 //	shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
