@@ -14,7 +14,6 @@
 #include "raytraceKernel.h"
 #include "intersections.h"
 #include "interactions.h"
-//#include <vector>
 
 #if CUDA_VERSION >= 5000
     #include <helper_math.h>
@@ -197,17 +196,16 @@ __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 light
 		shadedColour = ka * theRightIntercept.intrMaterial.color;
 
 		// Diffuse shading
-		glm::vec3 intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;
-//		glm::vec3 lightVec = glm::normalize (lightPos - intrPoint);	// Now it stores the vector pointing toward the light from the intersection point.
-		glm::vec3 intrNormal = glm::normalize (eye - intrPoint); // Refurbish intrNormal for use as the view vector.
-		float interceptValue = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0); // interceptValue is reused to compute dot product.
+		glm::vec3 intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;	// The intersection point.
+		glm::vec3 intrNormal = glm::normalize (eye - intrPoint); // intrNormal is the view vector.
+		float interceptValue = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0); // Diffuse Lighting is given by (N.L); N being normal at intersection pt and L being light vector.
 		intrPoint = (theRightIntercept.intrMaterial.color * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
-		shadedColour += multiplyVV (/*textureArray [light.materialid].color*/lightCol, intrPoint);		
+		shadedColour += multiplyVV (lightCol, intrPoint);		// shadedColour will have diffuse shaded colour. 
 
 		// Specular shading
-		lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reuse lightVec for storing the reflection of light ray around the normal.
+		lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reuse lightVec for storing the reflection of light vector around the normal.
 		interceptValue = max (glm::dot (lightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
-		shadedColour += (/*textureArray [light.materialid].color*/lightCol * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
+		shadedColour += (lightCol * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
 	}
 	
 	return	shadedColour;
@@ -401,7 +399,7 @@ __global__ void		sphereShade  (glm::vec2 resolution, int nIteration, cameraData 
 	;
 }
 
-//TODO: Almost Done!
+//TODO: Done!
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
 void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
   
