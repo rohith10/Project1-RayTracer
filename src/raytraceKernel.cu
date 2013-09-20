@@ -237,7 +237,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	  sqrtLights = sqrt (nLights);
 	  stepSize = 1.0/(sqrtLights-1);
 	  light = geoms [0];
-	  lightPos = /*multiplyMV (light.transform, */glm::vec3 (-0.5, -0.6, -0.5)/*)*/;
+	  lightPos = /*multiplyMV (light.transform, */glm::vec3 (-0.5, -0.55, -0.5)/*)*/;
 	  lightCol = (textureArray [light.materialid].color/* * textureArray [light.materialid].emittance*/);
   }
   __syncthreads ();
@@ -258,7 +258,6 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	for (int i = 0; i < nLights; ++ i)
 	{
 		lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
-//		lightVec = glm::normalize (multiplyMV (light.transform, lightPos) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 		shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
 	}
 //	lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x/* + ((i%sqrtLights)*stepSize)*/, lightPos.y, lightPos.z+ (sqrtLights/2)/* + ((i/sqrtLights)*stepSize)*/) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
@@ -273,18 +272,18 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	castRay.direction = castRay.origin - cam.position;		// We have ray starting at camera and pointing toward intersection point
 	castRay.direction = glm::normalize (reflectRay (castRay.direction, theRightIntercept.intrNormal)); // Reflect around intersection normal to compute shade of reflections. 
 	
-	// Find the intersection point of reflected ray.
+	// Find the intersection point of reflected ray and calculate shade there.
 	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
+	// Use only a point light to calculate the shade of reflection, since it doesn't matter much anyway.
 	lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x + (sqrtLights/2), lightPos.y, lightPos.z + (sqrtLights/2))) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 	if (hasReflective)
 		shadedColour = ((shadedColour * (float)0.92) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol) * (float)0.08));
 
 //	 Shadow shading
 //	 --------------
-//	castRay.origin = castRay.origin + theRightIntercept.interceptVal*castRay.direction;	// Store the intersection point in castRay.
-	castRay.origin += ((float)0.001*rightnormal);		// Perturb it along the normal a slight distance to avoid self intersection.
-	
+	castRay.origin += ((float)0.001*rightnormal);		// Perturb the intersection pt along the normal a slight distance 
+														// to avoid self intersection.
 	glm::vec3 shadowColour = glm::vec3 (0);
 	for (int i = 0; i < nLights; ++ i)
 	{
@@ -292,9 +291,9 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 		castRay.direction = glm::normalize (lightVec - castRay.origin);
 
 		if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
-			shadowColour += ka * theRightIntercept.intrMaterial.color;
+			shadowColour += ka * theRightIntercept.intrMaterial.color;	// If point in shadow, add ambient colour to shadowColour
 		else
-			shadowColour += shadedColour;
+			shadowColour += shadedColour;								// Otherwise, add the computed shade.
 	}
 	shadedColour = shadowColour/nLights;
 

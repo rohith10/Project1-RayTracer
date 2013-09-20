@@ -54,7 +54,7 @@ __host__ __device__ bool epsilonCheck(float a, float b);
 //returns x,y,z half-dimensions of tightest bounding box
 __host__ __device__ glm::vec3 getRadiuses(staticGeom geom);
 
-//TODO: IMPLEMENT THIS FUNCTION
+//TODO: Done!
 //Generates a random point on a given sphere
 __host__ __device__ glm::vec3 getRandomPointOnSphere(staticGeom sphere, float randomSeed);
 
@@ -233,9 +233,13 @@ __host__ __device__ glm::vec3 getRandomPointOnCube(staticGeom cube, float random
        
 }
 
-__host__ __device__ glm::vec3 getRandomPointOnSphere(staticGeom sphere, float randomSeed){
-
-  return glm::vec3(0,0,0);
+__host__ __device__ glm::vec3 getRandomPointOnSphere(staticGeom sphere, float randomSeed)
+{
+	thrust::default_random_engine rng(hash(randomSeed));
+    thrust::uniform_real_distribution<float> u (0, 1);
+	thrust::uniform_real_distribution<float> v (0, 1);
+	float radius = getRadiuses (sphere).x;
+	return glm::vec3 (radius*sin (PI*u(rng))*cos (TWO_PI*v(rng)), radius*sin (PI*u(rng))*sin (TWO_PI*v(rng)), radius*cos (PI*u(rng)));
 }
 
 __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& intersectionPoint, glm::vec3& normal)
