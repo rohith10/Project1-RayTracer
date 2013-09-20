@@ -5,7 +5,6 @@
 //       Peter Kutz and Yining Karl Li's GPU Pathtracer: http://gpupathtracer.blogspot.com/
 //       Yining Karl Li's TAKUA Render, a massively parallel pathtracing renderer: http://www.yiningkarlli.com
 
-#include <thrust/device_vector.h>
 #include <stdio.h>
 #include <cuda.h>
 #include <cmath>
@@ -231,10 +230,10 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
   if ((threadIdx.x == 0) && (threadIdx.y == 0))
   {
-	  ks = 0.3;
+	  ks = 0.4;
 	  ka = 0.1;
 	  kd = 1-ks-ka;
-	  nLights = 64;
+	  nLights = 25;
 	  sqrtLights = sqrt (nLights);
 	  stepSize = 1.0/(sqrtLights-1);
 	  light = geoms [0];
@@ -258,10 +257,13 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	glm::vec3 lightVec; 
 	for (int i = 0; i < nLights; ++ i)
 	{
-		lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x + ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
+		lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
 //		lightVec = glm::normalize (multiplyMV (light.transform, lightPos) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 		shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
 	}
+//	lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x/* + ((i%sqrtLights)*stepSize)*/, lightPos.y, lightPos.z+ (sqrtLights/2)/* + ((i/sqrtLights)*stepSize)*/) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal))));
+//	shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
+
 	shadedColour /= nLights;
 	glm::vec3 rightnormal = theRightIntercept.intrNormal;
 
@@ -274,12 +276,12 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	// Find the intersection point of reflected ray.
 	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
-	lightVec = glm::normalize (multiplyMV (light.transform, lightPos) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
+	lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x + (sqrtLights/2), lightPos.y, lightPos.z + (sqrtLights/2))) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 	if (hasReflective)
 		shadedColour = ((shadedColour * (float)0.92) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol) * (float)0.08));
 
-	// Shadow shading
-	// --------------
+//	 Shadow shading
+//	 --------------
 //	castRay.origin = castRay.origin + theRightIntercept.interceptVal*castRay.direction;	// Store the intersection point in castRay.
 	castRay.origin += ((float)0.001*rightnormal);		// Perturb it along the normal a slight distance to avoid self intersection.
 	
@@ -420,6 +422,18 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3));
   cudaMemcpy( cudaimage, renderCam->image, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyHostToDevice);
   
+  // Package render information such as no. of point lights to use to approximate area light and diffuse, specular and ambient coeffs
+  renderInfo *renderParamsDeviceCopy = NULL;
+  cudaMalloc((void**)&renderParamsDeviceCopy, sizeof(renderInfo));  
+  renderInfo renderParams;
+  renderParams.ks = 0.3;
+  renderParams.ka = 0.1;
+  renderParams.kd = 1-renderParams.ks-renderParams.ka;
+  renderParams.nLights = 64;
+  renderParams.sqrtLights = sqrt ((float)renderParams.nLights);
+  renderParams.lightStepSize = 1.0/(renderParams.sqrtLights-1);
+  cudaMemcpy (renderParamsDeviceCopy, &renderParams, sizeof(renderInfo), cudaMemcpyHostToDevice);
+
   //package geometry and materials and sent to GPU
   staticGeom* geomList = new staticGeom[numberOfGeoms];
   sceneInfo		primCounts;

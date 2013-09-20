@@ -107,7 +107,7 @@ RSCTCOEFF   0
 EMITTANCE   15
 
 CAMERA
-RES         320 320
+RES         360 360
 FOVY        25
 ITERATIONS  1
 FILE        test.bmp
@@ -187,4 +187,4 @@ material 8
 frame 0
 TRANS       0 10 0
 ROTAT       0 0 0
-SCALE       3 3 3
+SCALE       3 1 3

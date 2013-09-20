@@ -94,4 +94,18 @@ struct sceneInfo
 	int		nMeshes;
 };
 
+struct renderInfo
+{
+	float kd;
+	float ks;
+	float ka;
+	
+	int nLights;
+	int sqrtLights;
+	float lightStepSize;
+	glm::vec3 lightPos;
+	glm::vec3 lightCol;
+};
+
+
 #endif //CUDASTRUCTS_H
