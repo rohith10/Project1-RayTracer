@@ -95,14 +95,14 @@ __global__ void clearImage(glm::vec2 resolution, glm::vec3* image){
 }
 
 //Kernel that writes the image to the OpenGL PBO directly.
-__global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* image){
+__global__ void sendImageToPBO(uchar4* PBOpos, glm::vec2 resolution, glm::vec3* image, int nLights){
   
   int x = (blockIdx.x * blockDim.x) + threadIdx.x;
   int y = (blockIdx.y * blockDim.y) + threadIdx.y;
   int index = x + (y * resolution.x);
   
   if(x<=resolution.x && y<=resolution.y){
-
+	  image [index] /= nLights;
       glm::vec3 color;
       color.x = image[index].x*255.0;
       color.y = image[index].y*255.0;
@@ -214,7 +214,8 @@ __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 light
 //TODO: Done!
 //Core raytracer kernel
 __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, sceneInfo objectCountInfo, material* textureArray, projectionInfo ProjectionParams)
+                            staticGeom* geoms, sceneInfo objectCountInfo, material* textureArray, projectionInfo ProjectionParams,
+							glm::vec3 lightPosition)
 {
   __shared__ staticGeom light;
   __shared__ float ks;
@@ -231,11 +232,11 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	  ks = 0.5;
 	  ka = 0.1;
 	  kd = 1-ks-ka;
-	  nLights = 36;
+	  nLights = 64;
 	  sqrtLights = sqrt (nLights);
 	  stepSize = 1.0/(sqrtLights-1);
 	  light = geoms [0];
-	  lightPos = /*multiplyMV (light.transform, */glm::vec3 (-0.5, -0.6, -0.5)/*)*/;
+	  lightPos = /*multiplyMV (light.transform, */lightPosition/*)*/;
 	  lightCol = (textureArray [light.materialid].color /** textureArray [light.materialid].emittance*/);
   }
   __syncthreads ();
@@ -253,14 +254,14 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	interceptInfo theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	glm::vec3 lightVec; 
-	for (int i = 0; i < nLights; ++ i)
-	{
-		glm::vec3 tmpLightPos = multiplyMV (light.transform, glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)));
-		lightVec = glm::normalize (tmpLightPos - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
+//	for (int i = 0; i < nLights; ++ i)
+//	{
+//		glm::vec3 tmpLightPos = multiplyMV (light.transform, lightPosition/*glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)*/));
+		lightVec = glm::normalize (lightPosition - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 		shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
-	}
+//	}
 
-	shadedColour /= nLights;
+//	shadedColour /= nLights;
 	glm::vec3 rightnormal = theRightIntercept.intrNormal;
 
 	// Specular reflection
@@ -273,28 +274,28 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	// Use only a point light to calculate the shade of reflection, since it doesn't matter much anyway.
-	lightVec = glm::normalize (multiplyMV (light.transform, glm::vec3 (lightPos.x + (sqrtLights/2), lightPos.y, lightPos.z + (sqrtLights/2))) - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
+	lightVec = glm::normalize (lightPosition - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 	if (hasReflective)
 		shadedColour = ((shadedColour * (float)0.92) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol) * (float)0.08));
 
 //	 Shadow shading
 //	 --------------
-	castRay.origin += ((float)0.001*rightnormal);		// Perturb the intersection pt along the normal a slight distance 
+	castRay.origin += ((float)0.04*rightnormal);		// Perturb the intersection pt along the normal a slight distance 
 														// to avoid self intersection.
 	glm::vec3 shadowColour = glm::vec3 (0);
-	for (int i = 0; i < nLights; ++ i)
-	{
-		lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize), 1.0));
-		castRay.direction = glm::normalize (lightVec - castRay.origin);
+//	for (int i = 0; i < nLights; ++ i)
+//	{
+//		lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize), 1.0));
+		castRay.direction = glm::normalize (lightPosition - castRay.origin);
 
-		if (isShadowRayBlocked (castRay, lightVec, geoms, objectCountInfo))
-			shadowColour += ka * theRightIntercept.intrMaterial.color;	// If point in shadow, add ambient colour to shadowColour
-		else
-			shadowColour += shadedColour;								// Otherwise, add the computed shade.
-	}
-	shadedColour = shadowColour/nLights;
+		if (isShadowRayBlocked (castRay, lightPosition, geoms, objectCountInfo))
+			/*shadowColour +=*/shadedColour = ka * theRightIntercept.intrMaterial.color;	// If point in shadow, add ambient colour to shadowColour
+//		else
+//			shadowColour += shadedColour;								// Otherwise, add the computed shade.
+//	}
+//	shadedColour = shadowColour/nLights;
 
-	colors [index] = shadedColour;
+	colors [index] += shadedColour;
   }
 }
 
@@ -326,7 +327,7 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 	}
 
 //	if (min > 0)
-		if (glm::length (lightPos - r.origin) > (min+0.001))
+		if (glm::length (lightPos - r.origin) > (min+0.1))
 			return true;
 	return false;
 }
@@ -353,7 +354,7 @@ __global__ void		shadowFeeler (glm::vec2 resolution, float time, cameraData cam,
 		kd = renderParams->kd;
 		nLights = renderParams->nLights;
 		sqrtLights = renderParams->sqrtLights;
-		stepSize = renderParams->stepSize;
+		stepSize = renderParams->lightStepSize;
 		light = geoms [0];
 		lightPos = renderParams->lightPos;
 		lightCol = renderParams->lightCol;
@@ -375,9 +376,9 @@ __global__ void		shadowFeeler (glm::vec2 resolution, float time, cameraData cam,
 	//	Shadow shading
 	//	--------------
 		// Perturb the intersection pt along the normal a slight distance to avoid self intersection. 
-		castRay.origin += (castRay.direction * (theRightIntercept.interceptVal - 0.001));
+		castRay.origin += (castRay.direction * (float)(theRightIntercept.interceptVal - 0.001));
 															
-		glm::vec3 shadedColour = colour [index];
+		glm::vec3 shadedColour = colors [index];
 		glm::vec3 shadowColour = glm::vec3 (0);
 		for (int i = 0; i < nLights; ++ i)
 		{
@@ -393,7 +394,6 @@ __global__ void		shadowFeeler (glm::vec2 resolution, float time, cameraData cam,
 
 		colors [index] = shadedColour;
 	}
-  }
 }
 
 // Kernel for shading cubes.
@@ -559,9 +559,9 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   RenderParams.kd;
   RenderParams.ka;
   RenderParams.ks;
-  RenderParams.nLights = 25;
-  RenderParams.sqrtLights = sqrt (RenderParams.nLights);
-  RenderParams.lightStepSize =  = 1.0/(sqrtLights-1);
+  RenderParams.nLights = 64;
+  RenderParams.sqrtLights = sqrt ((float)RenderParams.nLights);
+  RenderParams.lightStepSize = 1.0/(RenderParams.sqrtLights-1);
   RenderParams.lightPos = glm::vec3 (-0.5, -0.6, -0.5);
   RenderParams.lightCol = materials [geoms [lightIndex].materialid].color;
 
@@ -573,12 +573,19 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.up = renderCam->ups[frame];
   cam.fov = renderCam->fov;
 
-//  cudaPrintfInit ();
-  //kernel launches
-  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, primCounts, materialColours, ProjectionParams);
-  
-  sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage);
-
+  glm::vec3 lightPos = glm::vec3 (-0.5, -0.6, -0.5);
+  for (int i = 0; i < RenderParams.nLights; i ++)
+  {
+	  lightPos = multiplyMV (geomList [0].transform, glm::vec4 (RenderParams.lightPos.x + ((i%RenderParams.sqrtLights)*RenderParams.lightStepSize), 
+				RenderParams.lightPos.y, RenderParams.lightPos.z + ((i/RenderParams.sqrtLights)*RenderParams.lightStepSize), 1.0));
+	  
+	  // kernel launches
+	  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, primCounts, materialColours, ProjectionParams, lightPos);
+	  cudaThreadSynchronize();
+	  std::cout << "\rRendering.. " <<  ceil ((float)i/(RenderParams.nLights-1) * 100) << " percent complete.";
+  }
+  sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage, RenderParams.nLights);
+  std::cout << "\n";
   //retrieve image from GPU
   cudaMemcpy( renderCam->image, cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 

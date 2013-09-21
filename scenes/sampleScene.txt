@@ -107,10 +107,10 @@ RSCTCOEFF   0
 EMITTANCE   15
 
 CAMERA
-RES         360 360
+RES         600 600
 FOVY        25
 ITERATIONS  1
-FILE        test.bmp
+FILE        test.png
 frame 0
 EYE         0 4.5 22
 VIEW        0 0 -1
