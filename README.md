@@ -38,4 +38,5 @@ SCREENSHOT
 -------------------------------------------------------------------------------
 VIDEO
 -------------------------------------------------------------------------------
-![YouTube Link]("http://www.youtube.com/embed/dKMg6kBt8Ek")
+Click on the image below to watch the video on YouTube:
+[![YouTube Link](http://img.youtube.com/vi/dKMg6kBt8Ek/0.jpg)](http://www.youtube.com/watch?v=dKMg6kBt8Ek)
