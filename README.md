@@ -38,4 +38,4 @@ SCREENSHOT
 -------------------------------------------------------------------------------
 VIDEO
 -------------------------------------------------------------------------------
-<iframe width="420" height="315" src="//www.youtube.com/embed/dKMg6kBt8Ek" frameborder="0" allowfullscreen></iframe>
+![YouTube Link]("http://www.youtube.com/embed/dKMg6kBt8Ek")
