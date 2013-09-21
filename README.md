@@ -19,7 +19,8 @@ FEATURES:
 Current
 -------
 The current version of the raytracer supports sphere and cube primitives. It can handle reflective 
-materials and treats all lights as area lights, sampled regularly at 8x8 grid points. Because of this, 
+materials and treats all lights as area lights, sampled regularly at 8x8 grid points (not because I wanted to; 
+the machines I can use have old GPUs that will buckle if I take more sample points). Because of this, 
 there is a very visible banding effect on the soft shadows. It does not perform antialiasing.
 
 On the way
@@ -41,3 +42,9 @@ VIDEO
 Click on the image below to watch the video on YouTube: 
 
 [![YouTube Link](http://img.youtube.com/vi/dKMg6kBt8Ek/0.jpg)](http://www.youtube.com/watch?v=dKMg6kBt8Ek)
+
+-------------------------------------------------------------------------------
+PERFORMANCE ANALYSIS
+-------------------------------------------------------------------------------
+A performance analysis was performed for this project and can be found in the root folder with the 
+name Project1-PerfAnalysis. It is a Word Document. 
