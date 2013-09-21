@@ -33,7 +33,7 @@ On the way
 -------------------------------------------------------------------------------
 SCREENSHOT
 -------------------------------------------------------------------------------
-<img src="https://raw.github.com/rohith10/Project1-RayTracer/master/renders/Final2-800px.png" />
+<img src="https://raw.github.com/rohith10/Project1-RayTracer/master/renders/Final2-800px.png" height="350" width="350"/>
 
 -------------------------------------------------------------------------------
 VIDEO
