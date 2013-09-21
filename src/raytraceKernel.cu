@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <cuda.h>
 #include <cmath>
+#include <ctime>
 #include "sceneStructs.h"
 #include "glm/glm.hpp"
 #include "utilities.h"
@@ -539,6 +540,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.up = renderCam->ups[frame];
   cam.fov = renderCam->fov;
 
+  time_t startTime = time (NULL);
   // For each point sampled in the area light, launch the raytraceRay Kernel which will compute the diffuse, specular, ambient
   // and shadow colours. It will also compute reflected colours for reflective surfaces.
   for (int i = 0; i < RenderParams.nLights; i ++)
@@ -555,7 +557,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   // Accumulate all the colours in the cudaimage memory block on the GPU, and divide by the no. of light samples
   // to get the final colour.
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage, RenderParams.nLights);
-  std::cout << "\n";
+  std::cout.precision (2);
+  std::cout << "\nRendered in " << difftime (time (NULL), startTime) << " seconds. \n\n";
   //retrieve image from GPU
   cudaMemcpy( renderCam->image, cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 
