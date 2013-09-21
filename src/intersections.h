@@ -19,6 +19,7 @@ __host__ __device__ glm::vec3 getPointOnRay(ray r, float t);
 //This is a workaround for GLM matrix multiplication not working properly on pre-Fermi NVIDIA GPUs.
 //Multiplies a cudaMat4 matrix and a vec4 and returns a vec3 clipped from the vec4
 __host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec4 v);
+//Overload for doing the same with a cudaMat4 and a vec3.
 __host__ __device__ glm::vec3 multiplyMV(cudaMat4 m, glm::vec3 v, bool isVector = false);
 
 // Component-wise vector multiply function. Multiplies two vec3s.
@@ -333,87 +334,18 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 		if ((diffAbs >= 0.5-epsilon) && (diffAbs <= 0.5+epsilon))
 		{	
 			normalArr [loopVar] = diff / diffAbs;
-//			normalArr [loopVar] /= normalArr [loopVar];	 // Just to be super certain that our normals have value of 1.0 in any direction.
 			break;
 		}
 	}
 
-	//glm::vec3	unitVectors [6];
-
-	//float num [6], den [6], t [6], min, counter;
-
-	//corners [0] = glm::vec3 (-0.5, -0.5, -0.5) - transformedRay.origin;
-	//corners [1] = glm::vec3 (0.5, 0.5, 0.5) - transformedRay.origin;
-
-	//unitVectors [0] = glm::vec3 (-1.0, 0.0, 0.0);
-	//unitVectors [1] = glm::vec3 (0.0, -1.0, 0.0);
-	//unitVectors [2] = glm::vec3 (0.0, 0.0, -1.0);
-	//unitVectors [3] = glm::vec3 (1.0, 0.0, 0.0);
-	//unitVectors [4] = glm::vec3 (0.0, 1.0, 0.0);
-	//unitVectors [5] = glm::vec3 (0.0, 0.0, 1.0);
-
-	//int		signChanger = 1;
-
-	//for (int loopVar = 0; loopVar < 6; loopVar ++)
-	//{
-	//	num [loopVar] = dot (corners [loopVar / 3], unitVectors [loopVar]);
-	//	den [loopVar] = dot (transformedRay.direction, unitVectors [loopVar]);
-
-	//	if (!den [loopVar])
-	//		t [loopVar] = -1;
-	//	else
-	//		t [loopVar] = num [loopVar] / den [loopVar];
-	//}
-
-	//corners [0] = vec3 (-0.5, -0.5, -0.5);
-	//corners [1] = vec3 (0.5, 0.5, 0.5);
-
-	//for (int loopVar = 0, counter = 0; loopVar < 6; loopVar ++)
-	//{
-	//	if (t [loopVar] == -1)
-	//		continue;
-
-	//	glm::vec3	interceptStart = transformedRay.origin + t [loopVar]*transformedRay.direction;
-	//	if (((interceptStart.x >= (corners [0].x-0.0001)) && (interceptStart.x <= (corners [1].x+0.0001))) &&
-	//		((interceptStart.y >= (corners [0].y-0.0001)) && (interceptStart.y <= (corners [1].y+0.0001))) &&
-	//		((interceptStart.z >= (corners [0].z-0.0001)) && (interceptStart.z <= (corners [1].z+0.0001))))
-	//		continue;
-	//	else
-	//		t [loopVar] = -1;
-	//}
-	//
-	//unsigned int minLoopVar = 0;
-	//min = 1e6;
-	//for (int loopVar = 0; loopVar < 6; loopVar ++)
-	//{
-	//	if (t [loopVar] == -1)
-	//		continue;
-	//	
-	//	if (min > t [loopVar])
-	//	{
-	//		min = t [loopVar];
-	//		minLoopVar = loopVar;
-	//	}
-	//}
-	//
-	//if (t [minLoopVar] < 0)
-	//	return -1;
-
-	//glm::vec3 iPt = transformedRay.origin+(t[minLoopVar]*transformedRay.direction);
-	//glm::vec4 intersectionPointInBodySpace = glm::vec4 (iPt.x, iPt.y, iPt.z, 1.0); 
 	glm::vec4 normalTobeTransformed = glm::vec4 (normalArr [0], normalArr [1], normalArr [2], 0);
 	cudaMat4 transposeBoxInvTransform;
 	transposeBoxInvTransform.x.x = box.inverseTransform.x.x;	transposeBoxInvTransform.x.y = box.inverseTransform.y.x;	transposeBoxInvTransform.x.z = box.inverseTransform.z.x;	transposeBoxInvTransform.x.w = box.inverseTransform.w.x;
 	transposeBoxInvTransform.y.x = box.inverseTransform.x.y;	transposeBoxInvTransform.y.y = box.inverseTransform.y.y;	transposeBoxInvTransform.y.z = box.inverseTransform.z.y;	transposeBoxInvTransform.y.w = box.inverseTransform.w.y;
 	transposeBoxInvTransform.z.x = box.inverseTransform.x.z;	transposeBoxInvTransform.z.y = box.inverseTransform.y.z;	transposeBoxInvTransform.z.z = box.inverseTransform.z.z;	transposeBoxInvTransform.z.w = box.inverseTransform.w.z;
 	transposeBoxInvTransform.w.x = box.inverseTransform.x.w;	transposeBoxInvTransform.w.y = box.inverseTransform.y.w;	transposeBoxInvTransform.w.z = box.inverseTransform.z.w;	transposeBoxInvTransform.w.w = box.inverseTransform.w.w;
-	//normalTobeTransformed.x = normalArr [0];
-	//normalTobeTransformed.y = normalArr [1];
-	//normalTobeTransformed.z = normalArr [2];
-	//normalTobeTransformed.w = 0;
 
 	// Transform the intersection point & the normal to world space.
-//	cudaMat4 rBodyTrans = box.translation * box.rotation;
 	intersectionPoint = multiplyMV (box.transform, intersectionPointInBodySpace);
 	normal = multiplyMV (transposeBoxInvTransform, normalTobeTransformed);
 	normal = glm::normalize (normal);

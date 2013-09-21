@@ -236,8 +236,8 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	  sqrtLights = sqrt (nLights);
 	  stepSize = 1.0/(sqrtLights-1);
 	  light = geoms [0];
-	  lightPos = /*multiplyMV (light.transform, */lightPosition/*)*/;
-	  lightCol = (textureArray [light.materialid].color /** textureArray [light.materialid].emittance*/);
+	  lightPos = lightPosition;
+	  lightCol = (textureArray [light.materialid].color);
   }
   __syncthreads ();
 
@@ -254,14 +254,12 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
 	interceptInfo theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
 	glm::vec3 lightVec; 
-//	for (int i = 0; i < nLights; ++ i)
-//	{
-//		glm::vec3 tmpLightPos = multiplyMV (light.transform, lightPosition/*glm::vec3 (lightPos.x+ ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize)*/));
-		lightVec = glm::normalize (lightPosition - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
-		shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
-//	}
-
-//	shadedColour /= nLights;
+		
+	lightVec = glm::normalize (lightPosition - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
+	shadedColour += calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol);
+	
+	// Store the normal at intersection to another variable before we reuse theRightIntercept to hold intersection
+	// point of the reflection ray.
 	glm::vec3 rightnormal = theRightIntercept.intrNormal;
 
 	// Specular reflection
@@ -273,7 +271,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	// Find the intersection point of reflected ray and calculate shade there.
 	float hasReflective = theRightIntercept.intrMaterial.hasReflective;
 	theRightIntercept = getIntercept (geoms, objectCountInfo, castRay, textureArray);
-	// Use only a point light to calculate the shade of reflection, since it doesn't matter much anyway.
+	
 	lightVec = glm::normalize (lightPosition - (castRay.origin + (castRay.direction*theRightIntercept.interceptVal)));
 	if (hasReflective)
 		shadedColour = ((shadedColour * (float)0.92) + (calcShade (theRightIntercept, lightVec, cam.position, castRay, textureArray, ka, ks, kd, lightCol) * (float)0.08));
@@ -283,19 +281,12 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 	castRay.origin += ((float)0.04*rightnormal);		// Perturb the intersection pt along the normal a slight distance 
 														// to avoid self intersection.
 	glm::vec3 shadowColour = glm::vec3 (0);
-//	for (int i = 0; i < nLights; ++ i)
-//	{
-//		lightVec = multiplyMV (light.transform, glm::vec4 (lightPos.x + ((i%sqrtLights)*stepSize), lightPos.y, lightPos.z + ((i/sqrtLights)*stepSize), 1.0));
-		castRay.direction = glm::normalize (lightPosition - castRay.origin);
+	castRay.direction = glm::normalize (lightPosition - castRay.origin);
 
-		if (isShadowRayBlocked (castRay, lightPosition, geoms, objectCountInfo))
-			/*shadowColour +=*/shadedColour = ka * theRightIntercept.intrMaterial.color;	// If point in shadow, add ambient colour to shadowColour
-//		else
-//			shadowColour += shadedColour;								// Otherwise, add the computed shade.
-//	}
-//	shadedColour = shadowColour/nLights;
+	if (isShadowRayBlocked (castRay, lightPosition, geoms, objectCountInfo))
+		shadedColour = ka * theRightIntercept.intrMaterial.color;	// If point in shadow, set shadedColour to ambient colour.
 
-	colors [index] += shadedColour;
+	colors [index] += shadedColour;			// Add computed shade to shadedColour.
   }
 }
 
@@ -326,13 +317,12 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 		}
 	}
 
-//	if (min > 0)
-		if (glm::length (lightPos - r.origin) > (min+0.1))
-			return true;
+	if (glm::length (lightPos - r.origin) > (min+0.1))
+		return true;
 	return false;
 }
 
-// At each pixel, trace a shadow ray to the light and see if it intersects something else.
+// NON_FUNCTIONAL: At each pixel, trace a shadow ray to the light and see if it intersects something else.
 __global__ void		shadowFeeler (glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
                             staticGeom* geoms, sceneInfo objectCountInfo, material* textureArray, projectionInfo ProjectionParams, 
 							renderInfo* renderParams)
@@ -396,14 +386,14 @@ __global__ void		shadowFeeler (glm::vec2 resolution, float time, cameraData cam,
 	}
 }
 
-// Kernel for shading cubes.
+// NON_FUNCTIONAL: Kernel for shading cubes.
 __global__ void		cubeShade  (glm::vec2 resolution, int nIteration, cameraData camDetails, int rayDepth, 
 								glm::vec3 *colorBuffer, staticGeom *cubesList, int nCubes, material *textureData, projectionInfo ProjParams)
 {
 	;
 }
 
-// Kernel for shading spheres.
+// NON_FUNCTIONAL: Kernel for shading spheres.
 __global__ void		sphereShade  (glm::vec2 resolution, int nIteration, cameraData camDetails, int rayDepth, 
 								glm::vec3 *colorBuffer, staticGeom *spheresList, int nSpheres, material *textureData, projectionInfo ProjParams)
 {
@@ -416,9 +406,10 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   
   int traceDepth = 1; //determines how many bounces the raytracer traces
   projectionInfo	ProjectionParams;
-//  setupProjection (ProjectionParams, renderCam->positions [frame], renderCam->ups [frame], renderCam->views [frame], renderCam->fov);
   float degToRad = 3.1415926 / 180.0;
-  ProjectionParams.centreProj = renderCam->positions [frame]+renderCam->views [frame];
+	
+  // Set up projection.
+	ProjectionParams.centreProj = renderCam->positions [frame]+renderCam->views [frame];
 	glm::vec3	eyeToProjCentre = ProjectionParams.centreProj - renderCam->positions [frame];
 	glm::vec3	A = glm::cross (eyeToProjCentre, renderCam->ups [frame]);
 	glm::vec3	B = glm::cross (A, eyeToProjCentre);
@@ -436,18 +427,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   glm::vec3* cudaimage = NULL;
   cudaMalloc((void**)&cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3));
   cudaMemcpy( cudaimage, renderCam->image, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyHostToDevice);
-  
-  // Package render information such as no. of point lights to use to approximate area light and diffuse, specular and ambient coeffs
-  renderInfo *renderParamsDeviceCopy = NULL;
-  cudaMalloc((void**)&renderParamsDeviceCopy, sizeof(renderInfo));  
-  renderInfo renderParams;
-  renderParams.ks = 0.3;
-  renderParams.ka = 0.1;
-  renderParams.kd = 1-renderParams.ks-renderParams.ka;
-  renderParams.nLights = 64;
-  renderParams.sqrtLights = sqrt ((float)renderParams.nLights);
-  renderParams.lightStepSize = 1.0/(renderParams.sqrtLights-1);
-  cudaMemcpy (renderParamsDeviceCopy, &renderParams, sizeof(renderInfo), cudaMemcpyHostToDevice);
 
   //package geometry and materials and sent to GPU
   staticGeom* geomList = new staticGeom[numberOfGeoms];
@@ -493,6 +472,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  geomList [0] = geomList [count-1];
 	  count --;
   }
+  // Lights may only be cubes.
   primCounts.nCubes = count;
   
   for(int i=0; i<numberOfGeoms; i++)
@@ -513,20 +493,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   }
 
   primCounts.nSpheres = count - primCounts.nCubes;
-
-  //if (!lightSet)
-  //{
-		//staticGeom newStaticGeom;
-		//newStaticGeom.type = geoms[0].type;
-		//newStaticGeom.materialid = geoms[0].materialid;
-		//newStaticGeom.translation = geoms[0].translations[frame];
-		//newStaticGeom.rotation = geoms[0].rotations[frame];
-		//newStaticGeom.scale = geoms[0].scales[frame];
-		//newStaticGeom.transform = geoms[0].transforms[frame];
-		//newStaticGeom.inverseTransform = geoms[0].inverseTransforms[frame];
-		//geomList[0] = newStaticGeom;
-  //}
-
   primCounts.nMeshes = 0;
 
   staticGeom* cudageoms = NULL;
@@ -573,24 +539,26 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.up = renderCam->ups[frame];
   cam.fov = renderCam->fov;
 
-  glm::vec3 lightPos = glm::vec3 (-0.5, -0.6, -0.5);
+  // For each point sampled in the area light, launch the raytraceRay Kernel which will compute the diffuse, specular, ambient
+  // and shadow colours. It will also compute reflected colours for reflective surfaces.
   for (int i = 0; i < RenderParams.nLights; i ++)
   {
-	  lightPos = multiplyMV (geomList [0].transform, glm::vec4 (RenderParams.lightPos.x + ((i%RenderParams.sqrtLights)*RenderParams.lightStepSize), 
+	  glm::vec3 lightPos = multiplyMV (geomList [0].transform, glm::vec4 (RenderParams.lightPos.x + ((i%RenderParams.sqrtLights)*RenderParams.lightStepSize), 
 				RenderParams.lightPos.y, RenderParams.lightPos.z + ((i/RenderParams.sqrtLights)*RenderParams.lightStepSize), 1.0));
 	  
 	  // kernel launches
 	  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, primCounts, materialColours, ProjectionParams, lightPos);
-	  cudaThreadSynchronize();
+	  cudaThreadSynchronize(); // Wait for Kernel to finish, because we don't want a race condition between successive kernel launches.
 	  std::cout << "\rRendering.. " <<  ceil ((float)i/(RenderParams.nLights-1) * 100) << " percent complete.";
   }
+
+  // Accumulate all the colours in the cudaimage memory block on the GPU, and divide by the no. of light samples
+  // to get the final colour.
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage, RenderParams.nLights);
   std::cout << "\n";
   //retrieve image from GPU
   cudaMemcpy( renderCam->image, cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 
- // cudaPrintfDisplay (stdout, true);
- // cudaPrintfEnd ();
   //free up stuff, or else we'll leak memory like a madman
    if (cudaimage)
 		cudaFree( cudaimage );
@@ -606,9 +574,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
  // make certain the kernel has completed
   cudaThreadSynchronize();
   
-  //  cudaFree( cudaimage );
-//  cudaFree( cudageoms );
-//  cudaFree (materialColours);
   delete geomList;
 
   checkCUDAError("Kernel failed!");
