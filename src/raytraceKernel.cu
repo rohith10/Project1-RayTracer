@@ -214,9 +214,9 @@ __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 light
 
 //TODO: Done!
 //Core raytracer kernel
-__global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, glm::vec3* colors,
-                            staticGeom* geoms, sceneInfo objectCountInfo, material* textureArray, projectionInfo ProjectionParams,
-							glm::vec3 lightPosition)
+__global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, int rayDepth, 
+                            glm::vec3* colors, staticGeom* geoms, material* textureArray, renderInfo * RenderParams, 
+							sceneInfo objectCountInfo, projectionInfo ProjectionParams, glm::vec3 lightPosition)
 {
   __shared__ staticGeom light;
   __shared__ float ks;
@@ -230,15 +230,15 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
   if ((threadIdx.x == 0) && (threadIdx.y == 0))
   {
-	  ks = 0.5;
-	  ka = 0.1;
-	  kd = 1-ks-ka;
-	  nLights = 64;
-	  sqrtLights = sqrt (nLights);
-	  stepSize = 1.0/(sqrtLights-1);
+	  ks = RenderParams->ks;
+	  ka = RenderParams->ka;
+	  kd = RenderParams->kd;
+	  nLights = RenderParams->nLights;
+	  sqrtLights = RenderParams->sqrtLights;
+	  stepSize = RenderParams->lightStepSize;
 	  light = geoms [0];
 	  lightPos = lightPosition;
-	  lightCol = (textureArray [light.materialid].color);
+	  lightCol = RenderParams->lightCol;
   }
   __syncthreads ();
 
@@ -522,15 +522,17 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   else
 	  cudaMemcpy( materialColours, materials, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
 
-  renderInfo	RenderParams;
-  RenderParams.kd;
-  RenderParams.ka;
-  RenderParams.ks;
+  renderInfo	RenderParams, *RenderParamsOnDevice = NULL;
+  RenderParams.ka = 0.12;
+  RenderParams.ks = 0.43;
+  RenderParams.kd = 1 - (RenderParams.ka + RenderParams.ks);
   RenderParams.nLights = 64;
   RenderParams.sqrtLights = sqrt ((float)RenderParams.nLights);
   RenderParams.lightStepSize = 1.0/(RenderParams.sqrtLights-1);
   RenderParams.lightPos = glm::vec3 (-0.5, -0.6, -0.5);
   RenderParams.lightCol = materials [geoms [lightIndex].materialid].color;
+  cudaMalloc ((void **)&RenderParamsOnDevice, sizeof (renderInfo));
+  cudaMemcpy (RenderParamsOnDevice, &RenderParams, sizeof (renderInfo), cudaMemcpyHostToDevice);
 
   //package camera
   cameraData cam;
@@ -549,7 +551,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 				RenderParams.lightPos.y, RenderParams.lightPos.z + ((i/RenderParams.sqrtLights)*RenderParams.lightStepSize), 1.0));
 	  
 	  // kernel launches
-	  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, primCounts, materialColours, ProjectionParams, lightPos);
+	  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, materialColours, RenderParamsOnDevice, primCounts, ProjectionParams, lightPos);
 	  cudaThreadSynchronize(); // Wait for Kernel to finish, because we don't want a race condition between successive kernel launches.
 	  std::cout << "\rRendering.. " <<  ceil ((float)i/(RenderParams.nLights-1) * 100) << " percent complete.";
   }
