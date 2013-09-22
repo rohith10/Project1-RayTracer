@@ -9,6 +9,7 @@
 #include <cuda.h>
 #include <cmath>
 #include <ctime>
+#include <random>
 #include "sceneStructs.h"
 #include "glm/glm.hpp"
 #include "utilities.h"
@@ -543,6 +544,9 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cam.fov = renderCam->fov;
 
   time_t startTime = time (NULL);
+  std::default_random_engine randomNumGen (hash (startTime));
+  std::uniform_real_distribution<float> jitter ((float)-0.01, (float)0.01);
+
   // For each point sampled in the area light, launch the raytraceRay Kernel which will compute the diffuse, specular, ambient
   // and shadow colours. It will also compute reflected colours for reflective surfaces.
   for (int i = 0; i < RenderParams.nLights; i ++)
@@ -550,6 +554,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  glm::vec3 lightPos = multiplyMV (geomList [0].transform, glm::vec4 (RenderParams.lightPos.x + ((i%RenderParams.sqrtLights)*RenderParams.lightStepSize), 
 				RenderParams.lightPos.y, RenderParams.lightPos.z + ((i/RenderParams.sqrtLights)*RenderParams.lightStepSize), 1.0));
 	  
+	  float zAdd = jitter (randomNumGen);
+	  cam.position.z += zAdd;
 	  // kernel launches
 	  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, materialColours, RenderParamsOnDevice, primCounts, ProjectionParams, lightPos);
 	  cudaThreadSynchronize(); // Wait for Kernel to finish, because we don't want a race condition between successive kernel launches.
