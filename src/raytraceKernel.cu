@@ -220,6 +220,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 							sceneInfo objectCountInfo, projectionInfo ProjectionParams, glm::vec3 lightPosition)
 {
   __shared__ staticGeom light;
+  __shared__ renderInfo RenderParamsOnBlock;
   __shared__ float ks;
   __shared__ float ka;
   __shared__ float kd;
@@ -231,6 +232,7 @@ __global__ void raytraceRay(glm::vec2 resolution, float time, cameraData cam, in
 
   if ((threadIdx.x == 0) && (threadIdx.y == 0))
   {
+	  RenderParamsOnBlock = *RenderParams;
 	  ks = RenderParams->ks;
 	  ka = RenderParams->ka;
 	  kd = RenderParams->kd;
@@ -545,25 +547,35 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   time_t startTime = time (NULL);
   std::default_random_engine randomNumGen (hash (startTime));
-  std::uniform_real_distribution<float> jitter ((float)-0.01, (float)0.01);
+  std::uniform_real_distribution<float> jitter ((float)0, (float)0.142);
 
   // For each point sampled in the area light, launch the raytraceRay Kernel which will compute the diffuse, specular, ambient
   // and shadow colours. It will also compute reflected colours for reflective surfaces.
   for (int i = 0; i < RenderParams.nLights; i ++)
   {
-	  glm::vec3 lightPos = multiplyMV (geomList [0].transform, glm::vec4 (RenderParams.lightPos.x + ((i%RenderParams.sqrtLights)*RenderParams.lightStepSize), 
-				RenderParams.lightPos.y, RenderParams.lightPos.z + ((i/RenderParams.sqrtLights)*RenderParams.lightStepSize), 1.0));
-	  
 	  float zAdd = jitter (randomNumGen);
-	  cam.position.z += zAdd;
+	  float xAdd = jitter (randomNumGen); 
+	  glm::vec3 curLightSamplePos = glm::vec3 (RenderParams.lightPos.x + ((i%RenderParams.sqrtLights)*RenderParams.lightStepSize), 
+												RenderParams.lightPos.y, 
+												RenderParams.lightPos.z + ((i/RenderParams.sqrtLights)*RenderParams.lightStepSize));
+	  curLightSamplePos.z += zAdd;
+	  curLightSamplePos.x += xAdd;
+	  
+	  if (!(i%8))	// Supersampling at 8x!
+	  {
+		cam.position.y += zAdd*0.002;
+		cam.position.x += xAdd*0.002;
+	  }
+
+	  glm::vec3 lightPos = multiplyMV (geomList [0].transform, glm::vec4 (curLightSamplePos, 1.0));
 	  // kernel launches
 	  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, materialColours, RenderParamsOnDevice, primCounts, ProjectionParams, lightPos);
 	  cudaThreadSynchronize(); // Wait for Kernel to finish, because we don't want a race condition between successive kernel launches.
 	  std::cout << "\rRendering.. " <<  ceil ((float)i/(RenderParams.nLights-1) * 100) << " percent complete.";
   }
 
-  // Accumulate all the colours in the cudaimage memory block on the GPU, and divide by the no. of light samples
-  // to get the final colour.
+  // Accumulate all the colours in the cudaimage memory block on the GPU, and divide 
+  // by the no. of light samples to get the final colour.
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage, RenderParams.nLights);
   std::cout.precision (2);
   std::cout << "\nRendered in " << difftime (time (NULL), startTime) << " seconds. \n\n";
