@@ -60,6 +60,13 @@ struct camera {
 	std::string imageName;
 };
 
+struct texture
+{
+	int texelHeight;
+	int texelWidth;
+	glm::vec3 * texels;
+};
+
 struct material{
 	glm::vec3 color;
 	float specularExponent;
@@ -68,6 +75,8 @@ struct material{
 	float hasRefractive;
 	float indexOfRefraction;
 	float hasScatter;
+	bool  hasTexture;
+	texture Texture;
 	glm::vec3 absorptionCoefficient;
 	float reducedScatterCoefficient;
 	float emittance;
@@ -85,6 +94,7 @@ struct interceptInfo
 	float		interceptVal;
 	glm::vec3	intrNormal;
 	material	intrMaterial;
+	glm::vec2	UV;
 };
 
 struct sceneInfo

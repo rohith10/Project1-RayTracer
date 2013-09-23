@@ -134,6 +134,7 @@ __device__ interceptInfo getIntercept (staticGeom * geoms, sceneInfo objectCount
 {
 	glm::vec3 intrPoint = glm::vec3 (0, 0, 0);
 	glm::vec3 intrNormal = glm::vec3 (0, 0, 0);
+	glm::vec2 UVcoords = glm::vec2 (0, 0);
 
 	float interceptValue = -32767;
 
@@ -154,7 +155,7 @@ __device__ interceptInfo getIntercept (staticGeom * geoms, sceneInfo objectCount
 	{
 		staticGeom currentGeom = geoms [i];
 
-		interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal);
+		interceptValue = boxIntersectionTest(currentGeom, castRay, intrPoint, intrNormal, UVcoords);
 		if (interceptValue > 0)
 		{
 			if (interceptValue < min)
@@ -164,6 +165,7 @@ __device__ interceptInfo getIntercept (staticGeom * geoms, sceneInfo objectCount
 				theRightIntercept.interceptVal = min;
 				theRightIntercept.intrNormal = intrNormal;
 				theRightIntercept.intrMaterial = textureArray [currentGeom.materialid];
+				theRightIntercept.UV = UVcoords;
 			}
 		}
 	}
@@ -189,6 +191,30 @@ __device__ interceptInfo getIntercept (staticGeom * geoms, sceneInfo objectCount
 	return theRightIntercept;
 }
 
+__device__ glm::vec3 getColour (material Material, glm::vec2 UVcoords)
+{
+	if (Material.hasTexture)
+	{	
+		unsigned long texelXY, texelXPlusOneY, texelXYPlusOne, texelXPlusOneYPlusOne;
+		float xInterp = (Material.Texture.texelWidth * UVcoords.x) - floor (Material.Texture.texelWidth * UVcoords.x);
+		float yInterp = (Material.Texture.texelHeight * UVcoords.y) - floor (Material.Texture.texelHeight * UVcoords.y);
+
+		texelXY = getIndex ((int)floor (Material.Texture.texelWidth * UVcoords.x), (int)floor (Material.Texture.texelHeight * UVcoords.y), Material.Texture.texelWidth);
+		texelXPlusOneY = getIndex ((int)ceil (Material.Texture.texelWidth * UVcoords.x), (int)floor (Material.Texture.texelHeight * UVcoords.y), Material.Texture.texelWidth);
+		texelXYPlusOne = getIndex ((int)floor (Material.Texture.texelWidth * UVcoords.x), (int)ceil (Material.Texture.texelHeight * UVcoords.y), Material.Texture.texelWidth);
+		texelXPlusOneYPlusOne = getIndex ((int)ceil (Material.Texture.texelWidth * UVcoords.x), (int)ceil (Material.Texture.texelHeight * UVcoords.y), Material.Texture.texelWidth);
+
+		glm::vec3 xInterpedColour1, xInterpedColour2, finalColour;
+		xInterpedColour1 = xInterp * Material.Texture.texels [texelXPlusOneY] + (1-xInterp)* Material.Texture.texels [texelXY];
+		xInterpedColour2 = xInterp * Material.Texture.texels [texelXPlusOneYPlusOne] + (1-xInterp)* Material.Texture.texels [texelXYPlusOne];
+		finalColour = yInterp * xInterpedColour2 + (1-yInterp) * xInterpedColour1;
+
+		return finalColour;
+	}
+	else
+		return Material.color;
+}
+
 __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 lightVec, glm::vec3 eye, ray castRay, material* textureArray, float ka, float ks, float kd, glm::vec3 lightCol)
 {
 	glm::vec3 shadedColour = glm::vec3 (0,0,0);
@@ -201,7 +227,7 @@ __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 light
 		glm::vec3 intrPoint = castRay.origin + theRightIntercept.interceptVal*castRay.direction;	// The intersection point.
 		glm::vec3 intrNormal = glm::normalize (eye - intrPoint); // intrNormal is the view vector.
 		float interceptValue = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0); // Diffuse Lighting is given by (N.L); N being normal at intersection pt and L being light vector.
-		intrPoint = (theRightIntercept.intrMaterial.color * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
+		intrPoint = (getColour (theRightIntercept.intrMaterial, theRightIntercept.UV) * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
 		shadedColour += multiplyVV (lightCol, intrPoint);		// shadedColour will have diffuse shaded colour. 
 
 		// Specular shading

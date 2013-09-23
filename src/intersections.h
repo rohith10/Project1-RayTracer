@@ -243,7 +243,7 @@ __host__ __device__ glm::vec3 getRandomPointOnSphere(staticGeom sphere, float ra
 	return glm::vec3 (radius*sin (PI*u(rng))*cos (TWO_PI*v(rng)), radius*sin (PI*u(rng))*sin (TWO_PI*v(rng)), radius*cos (PI*u(rng)));
 }
 
-__host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& intersectionPoint, glm::vec3& normal)
+__host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& intersectionPoint, glm::vec3& normal, glm::vec2 &UVcoords)
 {
 	// Uses the slab method to check for intersection.
 	// Refer http://www.siggraph.org/education/materials/HyperGraph/raytrace/rtinter3.htm for details.
@@ -308,6 +308,29 @@ __host__ __device__ float boxIntersectionTest(staticGeom box, ray r, glm::vec3& 
 	// Get the intersection point in model space.
 	glm::vec4 intersectionPointInBodySpace = glm::vec4 (getPointOnRay (transformedRay, tnear), 1.0);
 	
+	UVcoords = glm::vec2 (0, 0);
+	if ( (isApproximate (intersectionPointInBodySpace.x, 0.5))  || // YZ Faces
+		 (isApproximate (intersectionPointInBodySpace.x, -0.5)) )
+	{
+		UVcoords.x = intersectionPointInBodySpace.y;
+		UVcoords.y = intersectionPointInBodySpace.z;
+	}
+	else if ((isApproximate (intersectionPointInBodySpace.y, 0.5)) || // XZ Faces
+			 (isApproximate (intersectionPointInBodySpace.y, -0.5)))
+	{
+		UVcoords.x = intersectionPointInBodySpace.x;
+		UVcoords.y = intersectionPointInBodySpace.z;
+	}
+	else if ((isApproximate (intersectionPointInBodySpace.z, 0.5)) || // XY Face
+			 (isApproximate (intersectionPointInBodySpace.z, -0.5)))
+	{
+		UVcoords.x = intersectionPointInBodySpace.x;
+		UVcoords.y = intersectionPointInBodySpace.y;
+	}
+
+	UVcoords.x += 0.5;	// u
+	UVcoords.y += 0.5;	// v
+
 	glm::vec4 bodySpaceOrigin = glm::vec4 (0,0,0,1);
 
 	normal = glm::vec3 (0, 0, 0);
