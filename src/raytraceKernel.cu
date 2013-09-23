@@ -501,7 +501,6 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   staticGeom* cudageoms = NULL;
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
-  cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
   
   material		*materialColours = NULL;
   cudaError_t returnCode = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(material));
@@ -549,6 +548,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   std::default_random_engine randomNumGen (hash (startTime));
   std::uniform_real_distribution<float> jitter ((float)0, (float)0.142);
 
+  float movement = 1.0/48;
   // For each point sampled in the area light, launch the raytraceRay Kernel which will compute the diffuse, specular, ambient
   // and shadow colours. It will also compute reflected colours for reflective surfaces.
   for (int i = 0; i < RenderParams.nLights; i ++)
@@ -566,6 +566,18 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		cam.position.y += zAdd*0.002;
 		cam.position.x += xAdd*0.002;
 	  }
+
+	  if (!(i/32))
+	  {
+		  geomList [primCounts.nCubes].translation += glm::vec3 (movement, 0, 0);
+		  glm::mat4 transform = utilityCore::buildTransformationMatrix(geomList [primCounts.nCubes].translation, 
+																	   geomList [primCounts.nCubes].rotation, 
+																	   geomList [primCounts.nCubes].scale);
+		  geomList [primCounts.nCubes].transform = utilityCore::glmMat4ToCudaMat4(transform);
+		  geomList [primCounts.nCubes].inverseTransform = utilityCore::glmMat4ToCudaMat4(glm::inverse(transform));
+	  }
+	 
+	  cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
 
 	  glm::vec3 lightPos = multiplyMV (geomList [0].transform, glm::vec4 (curLightSamplePos, 1.0));
 	  // kernel launches
