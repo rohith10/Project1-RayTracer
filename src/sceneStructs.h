@@ -60,7 +60,7 @@ struct camera {
 	std::string imageName;
 };
 
-struct texture
+struct mytexture
 {
 	int texelHeight;
 	int texelWidth;
@@ -76,7 +76,7 @@ struct material{
 	float indexOfRefraction;
 	float hasScatter;
 	bool  hasTexture;
-	texture Texture;
+	mytexture Texture;
 	glm::vec3 absorptionCoefficient;
 	float reducedScatterCoefficient;
 	float emittance;

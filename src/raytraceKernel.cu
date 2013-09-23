@@ -191,6 +191,12 @@ __device__ interceptInfo getIntercept (staticGeom * geoms, sceneInfo objectCount
 	return theRightIntercept;
 }
 
+__device__ unsigned long getIndex (int x, int y, int MaxWidth)
+{	return (unsigned long) y*MaxWidth + x ;	}
+
+__host__ __device__ bool isApproximate (float valToBeCompared, float valToBeCheckedAgainst) 
+{ if ((valToBeCompared >= valToBeCheckedAgainst-0.001) && (valToBeCompared <= valToBeCheckedAgainst+0.001)) return true;	return false; }
+
 __device__ glm::vec3 getColour (material Material, glm::vec2 UVcoords)
 {
 	if (Material.hasTexture)
@@ -324,11 +330,11 @@ __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geoms
 {
 	float min = 1e6, interceptValue;
 	glm::vec3 intrPoint, intrNormal;
-	
+	glm::vec2 UVcoords = glm::vec2 (0, 0);
 	for (int i = 0; i < objectCountInfo.nCubes; ++i)
 	{
 		staticGeom currentGeom = geomsList [i];
-		interceptValue = boxIntersectionTest(currentGeom, r, intrPoint, intrNormal);
+		interceptValue = boxIntersectionTest(currentGeom, r, intrPoint, intrNormal, UVcoords);
 		if (interceptValue > 0)
 		{
 			if (interceptValue < min)
