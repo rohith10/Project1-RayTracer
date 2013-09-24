@@ -35,6 +35,28 @@ scene::scene(string filename){
 	}
 }
 
+scene::~scene ()
+{
+	for (int i = 0; i < materials.size (); i++)
+	{
+		if (materials [i].hasTexture)
+		{
+			materials[i].Texture.texelHeight = 0;
+			materials[i].Texture.texelWidth = 0;
+			delete [] materials[i].Texture.texels;
+			materials[i].Texture.texels = NULL;
+		}
+
+		if (materials [i].hasNormalMap)
+		{
+			materials[i].NormalMap.texelHeight = 0;
+			materials[i].NormalMap.texelWidth = 0;
+			delete [] materials[i].NormalMap.texels;
+			materials[i].NormalMap.texels = NULL;
+		}
+	}
+}
+
 int scene::loadObject(string objectid){
     int id = atoi(objectid.c_str());
     if(id!=objects.size()){
@@ -268,14 +290,35 @@ int scene::loadMaterial(string materialid){
 			}
 			else if (strcmp(tokens[0].c_str(), "TEXTURE")==0)
 			{
-				newMaterial.hasTexture = true;
 				int nComps;
-				unsigned char *bytes = stbi_load(tokens [1].c_str (), &newMaterial.Texture.texelWidth, &newMaterial.Texture.texelWidth, &nComps, 3);
-//				for (int 
+				unsigned char *bytes = stbi_load(tokens [1].c_str (), &newMaterial.Texture.texelWidth, &newMaterial.Texture.texelHeight, &nComps, 3);
+				if (bytes)
+				{
+					newMaterial.hasTexture = true;
+					newMaterial.Texture.texels = new glm::vec3 [newMaterial.Texture.texelWidth * newMaterial.Texture.texelHeight];
+					for (int i = 0; i < (newMaterial.Texture.texelWidth * newMaterial.Texture.texelHeight); i ++)
+					{
+						newMaterial.Texture.texels [i].r = bytes [3*i] / 255.0;
+						newMaterial.Texture.texels [i].g = bytes [3*i + 1] / 255.0;
+						newMaterial.Texture.texels [i].b = bytes [3*i + 2] / 255.0;
+					}
+				}
 			}
 			else if (strcmp(tokens[0].c_str(), "NMAP")==0)
 			{
-				newMaterial.hasNormalMap = true;
+				int nComps;
+				unsigned char *bytes = stbi_load(tokens [1].c_str (), &newMaterial.NormalMap.texelWidth, &newMaterial.NormalMap.texelHeight, &nComps, 3);
+				if (bytes)
+				{
+					newMaterial.hasNormalMap = true;
+					newMaterial.NormalMap.texels = new glm::vec3 [newMaterial.NormalMap.texelWidth * newMaterial.NormalMap.texelHeight];
+					for (int i = 0; i < (newMaterial.Texture.texelWidth * newMaterial.NormalMap.texelHeight); i ++)
+					{
+						newMaterial.NormalMap.texels [i].r = bytes [3*i] / 255.0;
+						newMaterial.NormalMap.texels [i].g = bytes [3*i + 1] / 255.0;
+						newMaterial.NormalMap.texels [i].b = bytes [3*i + 2] / 255.0;
+					}
+				}
 			}
 		}
 		materials.push_back(newMaterial);

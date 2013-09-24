@@ -535,6 +535,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   
   material		*materialColours = NULL;
+  // Guard against shallow copying here.. Materials has a pointer pointing to Texture data.
   cudaError_t returnCode = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(material));
   if (returnCode != cudaSuccess)
   {
