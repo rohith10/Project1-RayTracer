@@ -7,6 +7,7 @@
 #include <iostream>
 #include "scene.h"
 #include <cstring>
+#include "stb_image/stb_image.h"
 
 scene::scene(string filename){
 	cout << "Reading scene from " << filename << " ..." << endl;
@@ -227,7 +228,15 @@ int scene::loadMaterial(string materialid){
 	}else{
 		cout << "Loading Material " << id << "..." << endl;
 		material newMaterial;
+
+		newMaterial.hasTexture = false;
+		newMaterial.Texture.texelHeight = 0;
+		newMaterial.Texture.texelWidth = 0;
 	
+		newMaterial.hasNormalMap = false;
+		newMaterial.NormalMap.texelHeight = 0;
+		newMaterial.NormalMap.texelWidth = 0;
+
 		//load static properties
 		for(int i=0; i<10; i++){
 			string line;
@@ -255,8 +264,18 @@ int scene::loadMaterial(string materialid){
 			}else if(strcmp(tokens[0].c_str(), "RSCTCOEFF")==0){
 				newMaterial.reducedScatterCoefficient = atof(tokens[1].c_str());					  
 			}else if(strcmp(tokens[0].c_str(), "EMITTANCE")==0){
-				newMaterial.emittance = atof(tokens[1].c_str());					  
-			
+				newMaterial.emittance = atof(tokens[1].c_str());					  	
+			}
+			else if (strcmp(tokens[0].c_str(), "TEXTURE")==0)
+			{
+				newMaterial.hasTexture = true;
+				int nComps;
+				unsigned char *bytes = stbi_load(tokens [1].c_str (), &newMaterial.Texture.texelWidth, &newMaterial.Texture.texelWidth, &nComps, 3);
+//				for (int 
+			}
+			else if (strcmp(tokens[0].c_str(), "NMAP")==0)
+			{
+				newMaterial.hasNormalMap = true;
 			}
 		}
 		materials.push_back(newMaterial);

@@ -77,6 +77,8 @@ struct material{
 	float hasScatter;
 	bool  hasTexture;
 	mytexture Texture;
+	bool  hasNormalMap;
+	mytexture NormalMap;
 	glm::vec3 absorptionCoefficient;
 	float reducedScatterCoefficient;
 	float emittance;
