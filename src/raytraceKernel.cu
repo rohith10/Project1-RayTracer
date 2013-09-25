@@ -440,7 +440,7 @@ __global__ void		sphereShade  (glm::vec2 resolution, int nIteration, cameraData 
 }
 
 // If errorCode is not cudaSuccess, kills the program.
-__device__ void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, staticGeom *cudageoms, material * materialColours)
+void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, staticGeom *cudageoms, material * materialColours, int numberOfMaterials)
 {
   if (errorCode != cudaSuccess)
   {
@@ -453,12 +453,14 @@ __device__ void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, 
 		cudaFree( cudageoms );
 	  if (materialColours)
 	  {
-		  if (materialColours->hasTexture)
-			  cudaFree (materialColours->Texture.texels);
+		   for (int i = 0; i < numberOfMaterials; i ++)
+		   {
+			   if (materialColours [i].hasTexture)
+				cudaFree (materialColours[i].Texture.texels);
 
-		  if (materialColours->hasNormalMap)
-			  cudaFree (materialColours->NormalMap.texels);
-		  
+			   if (materialColours [i].hasNormalMap)
+				cudaFree (materialColours[i].NormalMap.texels);
+		   }
 		  cudaFree (materialColours);
 	  }
 
@@ -498,10 +500,12 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3));
   cudaMemcpy( cudaimage, renderCam->image, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyHostToDevice);
 
-  //package geometry and materials and sent to GPU
+  // package geometry to be sent to GPU global memory
   staticGeom* geomList = new staticGeom[numberOfGeoms];
   sceneInfo		primCounts;
   
+  // Reorder geometry so that light is the first item in geomList,
+  // followed by cubes and then spheres. Doing so reduces divergence.
   int count = 1;	int lightIndex = 0;
   bool lightSet = false;
   for(int i=0; i<numberOfGeoms; i++)
@@ -565,45 +569,58 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   primCounts.nSpheres = count - primCounts.nCubes;
   primCounts.nMeshes = 0;
 
+  // Allocate memory. We'll copy it later (because we're moving objects around for Motion blur).
   staticGeom* cudageoms = NULL;
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   
+
+  // Copy materials to GPU global memory:
   material		*materialColours = NULL;
   glm::vec3		*colourArray = NULL;
+
   // Guard against shallow copying here.. Materials has a pointer pointing to Texture data.
   int sizeOfMaterialsArr = numberOfMaterials * (sizeof (material));
   cudaError_t returnCode1 = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(material));
-  onDeviceErrorExit (returnCode1, cudaimage, cudageoms, materialColours);
+  onDeviceErrorExit (returnCode1, cudaimage, cudageoms, materialColours, numberOfMaterials);
 
   // Deep copying textures and normal maps:
   glm::vec3 *texture = NULL;
   glm::vec3 *norMap = NULL;
-
   for (int i = 0; i < numberOfMaterials; i ++)
   {
 	  material copyMaterial = materials [i];
+	  copyMaterial.Texture.texels = NULL;
+	  copyMaterial.NormalMap.texels = NULL;
+	  int noOfTexels = 0, noOfNMapTexels = 0;
 	  if (copyMaterial.hasTexture)
 	  {
-		  int noOfTexels = materials [i].Texture.texelHeight * materials [i].Texture.texelWidth;
+		  noOfTexels = materials [i].Texture.texelHeight * materials [i].Texture.texelWidth;
 		  cudaError_t returnCode2 = cudaMalloc ((void **)&texture, noOfTexels * sizeof (glm::vec3));
-		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours);
+		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours, numberOfMaterials);
 		  copyMaterial.Texture.texels = texture;
-		  cudaMemcpy( (materialColours+i), &copyMaterial, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
-		  cudaMemcpy( materialColours [i].Texture.texels, materials [i].Texture.texels, noOfTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	  }
 
 	  if (copyMaterial.hasNormalMap)
 	  {
-		  int noOfTexels = materials [i].NormalMap.texelHeight * materials [i].NormalMap.texelWidth;
-		  cudaError_t returnCode2 = cudaMalloc ((void **)&norMap, noOfTexels * sizeof (glm::vec3));
-		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours);
+		  noOfNMapTexels = materials [i].NormalMap.texelHeight * materials [i].NormalMap.texelWidth;
+		  cudaError_t returnCode2 = cudaMalloc ((void **)&norMap, noOfNMapTexels * sizeof (glm::vec3));
+		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours, numberOfMaterials);
 		  copyMaterial.NormalMap.texels = norMap;
-		  cudaMemcpy( (materialColours+i), &copyMaterial, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
-		  cudaMemcpy( materialColours [i].Texture.texels, materials [i].Texture.texels, noOfTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
 	  }
+
+  	  material * curMaterialDevice = (materialColours+i);
+	  cudaMemcpy( curMaterialDevice, &copyMaterial, sizeof(material), cudaMemcpyHostToDevice);
+
+	  if (noOfTexels)
+		  cudaMemcpy( curMaterialDevice->Texture.texels, materials [i].Texture.texels, noOfTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	  if (noOfNMapTexels)
+		  cudaMemcpy (curMaterialDevice->NormalMap.texels, materials [i].NormalMap.texels, noOfNMapTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+
   }
   // Need to check whether the above method is correct.
 
+  // Copy the render parameters like ks, kd values, the no. of times the area light is sampled, 
+  // the position of the light samples w/r to the light's geometry and so on.
   renderInfo	RenderParams, *RenderParamsOnDevice = NULL;
   RenderParams.ka = 0.12;
   RenderParams.ks = 0.43;
@@ -638,6 +655,8 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  glm::vec3 curLightSamplePos = glm::vec3 (RenderParams.lightPos.x + ((i%RenderParams.sqrtLights)*RenderParams.lightStepSize), 
 												RenderParams.lightPos.y, 
 												RenderParams.lightPos.z + ((i/RenderParams.sqrtLights)*RenderParams.lightStepSize));
+	  
+	  // Area light sampled in a jittered grid to reduce banding.
 	  curLightSamplePos.z += zAdd;
 	  curLightSamplePos.x += xAdd;
 	  
@@ -647,7 +666,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		cam.position.x += xAdd*0.002;
 	  }
 
-	  if (!(i/32))
+	  if (!(i/32))	// Motion blur!
 	  {
 		  geomList [primCounts.nCubes].translation += glm::vec3 (movement, 0, 0);
 		  glm::mat4 transform = utilityCore::buildTransformationMatrix(geomList [primCounts.nCubes].translation, 
@@ -656,7 +675,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		  geomList [primCounts.nCubes].transform = utilityCore::glmMat4ToCudaMat4(transform);
 		  geomList [primCounts.nCubes].inverseTransform = utilityCore::glmMat4ToCudaMat4(glm::inverse(transform));
 	  }
-	 
+	  // Now copy the geometry list to the GPU global memory.
 	  cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
 
 	  glm::vec3 lightPos = multiplyMV (geomList [0].transform, glm::vec4 (curLightSamplePos, 1.0));
@@ -680,7 +699,17 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
    if (cudageoms)
 		cudaFree( cudageoms );
    if (materialColours)
-		cudaFree (materialColours);
+   {
+	   for (int i = 0; i < numberOfMaterials; i ++)
+	   {
+		   if (materialColours [i].hasTexture)
+			cudaFree (materialColours[i].Texture.texels);
+
+		   if (materialColours [i].hasNormalMap)
+			cudaFree (materialColours[i].NormalMap.texels);
+	   }
+	   cudaFree (materialColours);
+   }
 
    cudaimage = NULL;
    cudageoms = NULL;

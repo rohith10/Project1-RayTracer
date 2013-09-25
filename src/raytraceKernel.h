@@ -22,6 +22,7 @@
 
 void cudaRaytraceCore(uchar4* pos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms);
 void setupProjection (projectionInfo &ProjectionParams, glm::vec3 eye, glm::vec3 view, glm::vec3 up, glm::vec2 fov);
+void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, staticGeom *cudageom, material * materialColours, int numberOfMaterials);
 
 __host__ __device__ glm::vec3 reflectRay (glm::vec3 incidentRay, glm::vec3 normal);  
 __device__ bool isShadowRayBlocked (ray r, glm::vec3 lightPos, staticGeom *geomsList, sceneInfo objectCountInfo);
@@ -30,6 +31,5 @@ __host__ __device__ bool isApproximate (float valToBeCompared, float valToBeChec
 __device__ unsigned long getIndex (int x, int y, int MaxWidth);
 //{	return (unsigned long) y*MaxWidth + x ;	}
 __device__ glm::vec3 getColour (material Material, glm::vec2 UVcoords);
-__device__ void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, staticGeom *cudageom, material * materialColours);
 
 #endif
