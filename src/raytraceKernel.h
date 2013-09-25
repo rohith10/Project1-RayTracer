@@ -30,5 +30,6 @@ __host__ __device__ bool isApproximate (float valToBeCompared, float valToBeChec
 __device__ unsigned long getIndex (int x, int y, int MaxWidth);
 //{	return (unsigned long) y*MaxWidth + x ;	}
 __device__ glm::vec3 getColour (material Material, glm::vec2 UVcoords);
+__device__ void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, staticGeom *cudageom, material * materialColours);
 
 #endif

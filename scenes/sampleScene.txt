@@ -112,7 +112,7 @@ FOVY        25
 ITERATIONS  1
 FILE        test.png
 frame 0
-EYE         0 4.5 22
+EYE         0 4.5 25
 VIEW        0 0 -1
 UP          0 1 0
 

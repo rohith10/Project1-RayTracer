@@ -235,13 +235,16 @@ __device__ glm::vec3 calcShade (interceptInfo theRightIntercept, glm::vec3 light
 		float interceptValue = max (glm::dot (theRightIntercept.intrNormal, lightVec), (float)0); // Diffuse Lighting is given by (N.L); N being normal at intersection pt and L being light vector.
 		intrPoint = (getColour (theRightIntercept.intrMaterial, theRightIntercept.UV) * kd * interceptValue);			// Reuse intrPoint to store partial product (kdId) of the diffuse shading computation.
 		shadedColour += multiplyVV (lightCol, intrPoint);		// shadedColour will have diffuse shaded colour. 
-
+		// Quick and Dirty fix for lights.
+		if ((theRightIntercept.intrMaterial.emittance > 0) && (interceptValue > 0))
+			shadedColour = glm::vec3 (1,1,1);
+		
 		// Specular shading
 		lightVec = glm::normalize (reflectRay (-lightVec, theRightIntercept.intrNormal)); // Reuse lightVec for storing the reflection of light vector around the normal.
 		interceptValue = max (glm::dot (lightVec, intrNormal), (float)0);				// Reuse interceptValue for computing dot pdt of specular.
 		shadedColour += (lightCol * ks * pow (interceptValue, theRightIntercept.intrMaterial.specularExponent));
 	}
-	
+
 	return	shadedColour;
 }
 
@@ -436,6 +439,37 @@ __global__ void		sphereShade  (glm::vec2 resolution, int nIteration, cameraData 
 	;
 }
 
+// If errorCode is not cudaSuccess, kills the program.
+__device__ void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, staticGeom *cudageoms, material * materialColours)
+{
+  if (errorCode != cudaSuccess)
+  {
+	  std::cout << "\nError while trying to send texture data to the GPU!";
+	  std::cin.get ();
+
+	  if (cudaimage)
+		cudaFree( cudaimage );
+	  if (cudageoms)
+		cudaFree( cudageoms );
+	  if (materialColours)
+	  {
+		  if (materialColours->hasTexture)
+			  cudaFree (materialColours->Texture.texels);
+
+		  if (materialColours->hasNormalMap)
+			  cudaFree (materialColours->NormalMap.texels);
+		  
+		  cudaFree (materialColours);
+	  }
+
+	  cudaimage = NULL;
+	  cudageoms = NULL;
+	  materialColours = NULL;
+
+	  exit (EXIT_FAILURE);
+  }
+}
+
 //TODO: Done!
 // Wrapper for the __global__ call that sets up the kernel calls and does a ton of memory management
 void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iterations, material* materials, int numberOfMaterials, geom* geoms, int numberOfGeoms){
@@ -535,27 +569,40 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
   
   material		*materialColours = NULL;
+  glm::vec3		*colourArray = NULL;
   // Guard against shallow copying here.. Materials has a pointer pointing to Texture data.
-  cudaError_t returnCode = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(material));
-  if (returnCode != cudaSuccess)
-  {
-	  std::cout << "\nError while trying to send texture data to the GPU!";
-	  std::cin.get ();
+  int sizeOfMaterialsArr = numberOfMaterials * (sizeof (material));
+  cudaError_t returnCode1 = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(material));
+  onDeviceErrorExit (returnCode1, cudaimage, cudageoms, materialColours);
 
-	  if (cudaimage)
-		  cudaFree( cudaimage );
-	  if (cudageoms)
-		  cudaFree( cudageoms );
-	  if (materialColours)
-		  cudaFree (materialColours);
-	  
-	  cudaimage = NULL;
-	  cudageoms = NULL;
-	  materialColours = NULL;
-	  exit (EXIT_FAILURE);
+  // Deep copying textures and normal maps:
+  glm::vec3 *texture = NULL;
+  glm::vec3 *norMap = NULL;
+
+  for (int i = 0; i < numberOfMaterials; i ++)
+  {
+	  material copyMaterial = materials [i];
+	  if (copyMaterial.hasTexture)
+	  {
+		  int noOfTexels = materials [i].Texture.texelHeight * materials [i].Texture.texelWidth;
+		  cudaError_t returnCode2 = cudaMalloc ((void **)&texture, noOfTexels * sizeof (glm::vec3));
+		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours);
+		  copyMaterial.Texture.texels = texture;
+		  cudaMemcpy( (materialColours+i), &copyMaterial, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
+		  cudaMemcpy( materialColours [i].Texture.texels, materials [i].Texture.texels, noOfTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	  }
+
+	  if (copyMaterial.hasNormalMap)
+	  {
+		  int noOfTexels = materials [i].NormalMap.texelHeight * materials [i].NormalMap.texelWidth;
+		  cudaError_t returnCode2 = cudaMalloc ((void **)&norMap, noOfTexels * sizeof (glm::vec3));
+		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours);
+		  copyMaterial.NormalMap.texels = norMap;
+		  cudaMemcpy( (materialColours+i), &copyMaterial, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
+		  cudaMemcpy( materialColours [i].Texture.texels, materials [i].Texture.texels, noOfTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	  }
   }
-  else
-	  cudaMemcpy( materialColours, materials, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
+  // Need to check whether the above method is correct.
 
   renderInfo	RenderParams, *RenderParamsOnDevice = NULL;
   RenderParams.ka = 0.12;
