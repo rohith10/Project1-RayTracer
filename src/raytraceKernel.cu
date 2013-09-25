@@ -453,14 +453,14 @@ void onDeviceErrorExit (cudaError_t errorCode, glm::vec3 *cudaimage, staticGeom 
 		cudaFree( cudageoms );
 	  if (materialColours)
 	  {
-		   for (int i = 0; i < numberOfMaterials; i ++)
+		   /*for (int i = 0; i < numberOfMaterials; i ++)
 		   {
 			   if (materialColours [i].hasTexture)
 				cudaFree (materialColours[i].Texture.texels);
 
 			   if (materialColours [i].hasNormalMap)
 				cudaFree (materialColours[i].NormalMap.texels);
-		   }
+		   }*/
 		  cudaFree (materialColours);
 	  }
 
@@ -582,41 +582,48 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   int sizeOfMaterialsArr = numberOfMaterials * (sizeof (material));
   cudaError_t returnCode1 = cudaMalloc((void**)&materialColours, numberOfMaterials*sizeof(material));
   onDeviceErrorExit (returnCode1, cudaimage, cudageoms, materialColours, numberOfMaterials);
+  cudaMemcpy (materialColours, materials, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
 
+  // Texture mapping currently disabled till I figure out all this __align__ nonsense!
   // Deep copying textures and normal maps:
-  glm::vec3 *texture = NULL;
-  glm::vec3 *norMap = NULL;
-  for (int i = 0; i < numberOfMaterials; i ++)
-  {
-	  material copyMaterial = materials [i];
-	  copyMaterial.Texture.texels = NULL;
-	  copyMaterial.NormalMap.texels = NULL;
-	  int noOfTexels = 0, noOfNMapTexels = 0;
-	  if (copyMaterial.hasTexture)
-	  {
-		  noOfTexels = materials [i].Texture.texelHeight * materials [i].Texture.texelWidth;
-		  cudaError_t returnCode2 = cudaMalloc ((void **)&texture, noOfTexels * sizeof (glm::vec3));
-		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours, numberOfMaterials);
-		  copyMaterial.Texture.texels = texture;
-	  }
+  //glm::vec3 *texture = NULL;
+  //glm::vec3 *norMap = NULL;
+  //material *copyMaterial = new material [numberOfMaterials];	// SUCKS!
+  //for (int i = 0; i < numberOfMaterials; i ++)
+  //{
+	 // copyMaterial [i] = materials [i];
+	 // copyMaterial [i].Texture.texels = NULL;
+	 // copyMaterial [i].NormalMap.texels = NULL;
+	 // int noOfTexels = 0, noOfNMapTexels = 0;
+	 // if (copyMaterial [i].hasTexture)
+	 // {
+		//  noOfTexels = materials [i].Texture.texelHeight * materials [i].Texture.texelWidth;
+		//  cudaError_t returnCode2 = cudaMalloc ((void **)&texture, noOfTexels * sizeof (glm::vec3));
+		//  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours, numberOfMaterials);
+		//  copyMaterial [i].Texture.texels = texture;
+	 // }
 
-	  if (copyMaterial.hasNormalMap)
-	  {
-		  noOfNMapTexels = materials [i].NormalMap.texelHeight * materials [i].NormalMap.texelWidth;
-		  cudaError_t returnCode2 = cudaMalloc ((void **)&norMap, noOfNMapTexels * sizeof (glm::vec3));
-		  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours, numberOfMaterials);
-		  copyMaterial.NormalMap.texels = norMap;
-	  }
+	 // if (copyMaterial [i].hasNormalMap)
+	 // {
+		//  noOfNMapTexels = materials [i].NormalMap.texelHeight * materials [i].NormalMap.texelWidth;
+		//  cudaError_t returnCode2 = cudaMalloc ((void **)&norMap, noOfNMapTexels * sizeof (glm::vec3));
+		//  onDeviceErrorExit (returnCode2, cudaimage, cudageoms, materialColours, numberOfMaterials);
+		//  copyMaterial [i].NormalMap.texels = norMap;
+	 // }
+  //}
 
-  	  material * curMaterialDevice = (materialColours+i);
-	  cudaMemcpy( curMaterialDevice, &copyMaterial, sizeof(material), cudaMemcpyHostToDevice);
+  //cudaMemcpy (materialColours, copyMaterial, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
 
-	  if (noOfTexels)
-		  cudaMemcpy( curMaterialDevice->Texture.texels, materials [i].Texture.texels, noOfTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
-	  if (noOfNMapTexels)
-		  cudaMemcpy (curMaterialDevice->NormalMap.texels, materials [i].NormalMap.texels, noOfNMapTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+  //for (int i = 0; i < numberOfMaterials; i ++)
+  //{
 
-  }
+	 // if (noOfTexels)
+		//  cudaMemcpy( curMaterialDevice->Texture.texels, materials [i].Texture.texels, noOfTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+	 // if (noOfNMapTexels)
+		//  cudaMemcpy (curMaterialDevice->NormalMap.texels, materials [i].NormalMap.texels, noOfNMapTexels*sizeof(glm::vec3), cudaMemcpyHostToDevice);
+
+  //}
+
   // Need to check whether the above method is correct.
 
   // Copy the render parameters like ks, kd values, the no. of times the area light is sampled, 
@@ -700,14 +707,14 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 		cudaFree( cudageoms );
    if (materialColours)
    {
-	   for (int i = 0; i < numberOfMaterials; i ++)
+	   /*for (int i = 0; i < numberOfMaterials; i ++)
 	   {
 		   if (materialColours [i].hasTexture)
 			cudaFree (materialColours[i].Texture.texels);
 
 		   if (materialColours [i].hasNormalMap)
 			cudaFree (materialColours[i].NormalMap.texels);
-	   }
+	   }*/
 	   cudaFree (materialColours);
    }
 
