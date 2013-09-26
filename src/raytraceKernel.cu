@@ -571,7 +571,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 
   // Allocate memory. We'll copy it later (because we're moving objects around for Motion blur).
   staticGeom* cudageoms = NULL;
-  cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom));
+  cudaMalloc((void**)&cudageoms, numberOfGeoms*sizeof(staticGeom)); 
   
 
   // Copy materials to GPU global memory:
@@ -584,7 +584,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   onDeviceErrorExit (returnCode1, cudaimage, cudageoms, materialColours, numberOfMaterials);
   cudaMemcpy (materialColours, materials, numberOfMaterials*sizeof(material), cudaMemcpyHostToDevice);
 
-  // Texture mapping currently disabled till I figure out all this __align__ nonsense!
+  // TODO: Texture mapping: Use index to a texture array.
   // Deep copying textures and normal maps:
   //glm::vec3 *texture = NULL;
   //glm::vec3 *norMap = NULL;
@@ -686,6 +686,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  cudaMemcpy( cudageoms, geomList, numberOfGeoms*sizeof(staticGeom), cudaMemcpyHostToDevice);
 
 	  glm::vec3 lightPos = multiplyMV (geomList [0].transform, glm::vec4 (curLightSamplePos, 1.0));
+	  
 	  // kernel launches
 	  raytraceRay<<<fullBlocksPerGrid, threadsPerBlock>>>(renderCam->resolution, (float)iterations, cam, traceDepth, cudaimage, cudageoms, materialColours, RenderParamsOnDevice, primCounts, ProjectionParams, lightPos);
 	  cudaThreadSynchronize(); // Wait for Kernel to finish, because we don't want a race condition between successive kernel launches.
