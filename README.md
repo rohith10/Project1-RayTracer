@@ -19,17 +19,16 @@ FEATURES:
 Current
 -------
 The current version of the raytracer supports sphere and cube primitives. It can handle reflective 
-materials and treats all lights as area lights, sampled regularly at 8x8 grid points (not because I wanted to; 
-the machines I can use have old GPUs that will buckle if I take more sample points). Because of this, 
-there is a very visible banding effect on the soft shadows. It does not perform antialiasing.
+materials and treats all lights as area lights. The no. of samples for the area light can be specified 
+by the programmer and sampling is done using a jittered grid. It supports Supersampled Antialiasing, the 
+maximum number of samples being bound only by the number of samples for the area light. It also has support 
+for motion blur. Due to the nature of implementation, both of these features are free of performance overheads.
 
 On the way
 ----------
-* Antialiasing (Supersampling and Multisampling)
 * Fresnel refraction
 * Texture and Normal Mapping
 * Depth of field
-* Motion blur
 
 -------------------------------------------------------------------------------
 SCREENSHOT
