@@ -1,5 +1,6 @@
 // CIS565 CUDA Raytracer: A parallel raytracer for Patrick Cozzi's CIS565: GPU Computing at the University of Pennsylvania
-// Written by Yining Karl Li, Copyright (c) 2012 University of Pennsylvania
+// Base framework written by Yining Karl Li, Copyright (c) 2012 University of Pennsylvania
+// Raytracing and shading code written by Rohith Chandran.
 // This file includes code from:
 //       Rob Farber for CUDA-GL interop, from CUDA Supercomputing For The Masses: http://www.drdobbs.com/architecture-and-design/cuda-supercomputing-for-the-masses-part/222600097
 //       Peter Kutz and Yining Karl Li's GPU Pathtracer: http://gpupathtracer.blogspot.com/
@@ -632,7 +633,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   RenderParams.ka = 0.12;
   RenderParams.ks = 0.43;
   RenderParams.kd = 1 - (RenderParams.ka + RenderParams.ks);
-  RenderParams.nLights = 64;
+  RenderParams.nLights = 500;
   RenderParams.sqrtLights = sqrt ((float)RenderParams.nLights);
   RenderParams.lightStepSize = 1.0/(RenderParams.sqrtLights-1);
   RenderParams.lightPos = glm::vec3 (-0.5, -0.6, -0.5);
@@ -652,7 +653,9 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   std::default_random_engine randomNumGen (hash (startTime));
   std::uniform_real_distribution<float> jitter ((float)0, (float)0.142);
 
-  float movement = 1.0/48;
+  int oneEighthDivisor = RenderParams.nLights / 8;			// For motion blur
+  int threeFourthNumLights = RenderParams.nLights*3 / 4;	// For AA
+  float movement = 2.5/(threeFourthNumLights);
   // For each point sampled in the area light, launch the raytraceRay Kernel which will compute the diffuse, specular, ambient
   // and shadow colours. It will also compute reflected colours for reflective surfaces.
   for (int i = 0; i < RenderParams.nLights; i ++)
@@ -667,13 +670,13 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
 	  curLightSamplePos.z += zAdd;
 	  curLightSamplePos.x += xAdd;
 	  
-	  if (!(i%8))	// Supersampling at 8x!
+	  if (!(i%oneEighthDivisor))	// Supersampling at 8x!
 	  {
 		cam.position.y += zAdd*0.002;
 		cam.position.x += xAdd*0.002;
 	  }
 
-	  if (!(i/32))	// Motion blur!
+	  if (!(i/threeFourthNumLights))	// Motion blur!
 	  {
 		  geomList [primCounts.nCubes].translation += glm::vec3 (movement, 0, 0);
 		  glm::mat4 transform = utilityCore::buildTransformationMatrix(geomList [primCounts.nCubes].translation, 
@@ -696,7 +699,7 @@ void cudaRaytraceCore(uchar4* PBOpos, camera* renderCam, int frame, int iteratio
   // Accumulate all the colours in the cudaimage memory block on the GPU, and divide 
   // by the no. of light samples to get the final colour.
   sendImageToPBO<<<fullBlocksPerGrid, threadsPerBlock>>>(PBOpos, renderCam->resolution, cudaimage, RenderParams.nLights);
-  std::cout.precision (2);
+  std::cout.precision (4);
   std::cout << "\nRendered in " << difftime (time (NULL), startTime) << " seconds. \n\n";
   //retrieve image from GPU
   cudaMemcpy( renderCam->image, cudaimage, (int)renderCam->resolution.x*(int)renderCam->resolution.y*sizeof(glm::vec3), cudaMemcpyDeviceToHost);
