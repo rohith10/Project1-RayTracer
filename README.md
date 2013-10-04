@@ -33,7 +33,9 @@ On the way
 -------------------------------------------------------------------------------
 SCREENSHOT
 -------------------------------------------------------------------------------
-<img src="https://raw.github.com/rohith10/Project1-RayTracer/master/renders/Final2-800px.png" height="350" width="350"/>
+<img src="https://raw.github.com/rohith10/Project1-RayTracer/master/PROJ1_WIN/565Raytracer/test.0.png" height="350" width="350"/>
+<br />The circular pattern seen on the back wall is due to floating point errors exacerbated by the old 
+driver on the lab machine I used to make this build.
 
 -------------------------------------------------------------------------------
 VIDEO
